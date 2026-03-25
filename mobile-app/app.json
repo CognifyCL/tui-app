@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "TUI Mobile",
+    "slug": "tui-mobile-client",
+    "version": "1.0.0",
+    "owner": "cognifycl",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1e1e1e"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "cl.cognify.tuimobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#1e1e1e"
+      },
+      "package": "cl.cognify.tuimobile"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

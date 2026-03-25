@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+    <style>
+        body, html { margin: 0; padding: 0; background-color: #000; height: 100%; overflow: hidden; width: 100%; }
+        #terminal { height: 100vh; width: 100vw; }
+    </style>
+</head>
+<body>
+    <div id="terminal"></div>
+    <script>
+        const term = new Terminal({
+            theme: { background: '#000', foreground: '#fff' },
+            fontFamily: 'monospace',
+            fontSize: 12,
+            cursorBlink: false,
+            allowProposedApi: true
+        });
+        
+        const fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(document.getElementById('terminal'));
+        term.write('\x1b[1;32mTerminal Ready!\x1b[0m\r\n');
+        fitAddon.fit();
+
+        // --- Lógica de Gestos Pro (Scroll con dos dedos) ---
+        let lastTouchY = 0;
+        let isTwoFingerTouch = false;
+
+        document.getElementById('terminal').addEventListener('touchstart', (e) => {
+            if (e.touches.length === 2) {
+                isTwoFingerTouch = true;
+                lastTouchY = (e.touches[0].pageY + e.touches[1].pageY) / 2;
+                e.preventDefault();
+            } else {
+                isTwoFingerTouch = false;
+            }
+        }, { passive: false });
+
+        document.getElementById('terminal').addEventListener('touchmove', (e) => {
+            if (isTwoFingerTouch && e.touches.length === 2) {
+                const currentTouchY = (e.touches[0].pageY + e.touches[1].pageY) / 2;
+                const deltaY = lastTouchY - currentTouchY;
+                
+                // Sensibilidad del scroll (ajustable)
+                if (Math.abs(deltaY) > 5) {
+                    const lines = Math.round(deltaY / 10);
+                    if (lines !== 0) {
+                        term.scrollLines(lines);
+                        lastTouchY = currentTouchY;
+                    }
+                }
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        document.getElementById('terminal').addEventListener('touchend', () => {
+            isTwoFingerTouch = false;
+        });
+        // --------------------------------------------------
+
+        // Notificar el tamaño inicial a React Native
+        const sendResize = () => {
+            fitAddon.fit();
+            window.ReactNativeWebView.postMessage(JSON.stringify({ 
+                type: 'resize', 
+                cols: term.cols, 
+                rows: term.rows 
+            }));
+        };
+
+        // Debounce para no saturar con eventos de resize
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(sendResize, 250);
+        });
+
+        // Ejecutar fit inicial después de un breve delay para asegurar que el DOM esté listo
+        setTimeout(sendResize, 500);
+
+        // Comunicar entrada de teclado a React Native
+        term.onData(data => {
+            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'input', content: data }));
+        });
+
+        // Función global para recibir datos (más robusta que postMessage)
+        window.onTerminalData = (content) => {
+            term.write(content);
+        };
+
+        // Recibir datos desde React Native para renderizar
+        window.addEventListener('message', (event) => {
+            try {
+                // En Android/iOS event.data puede venir ya parseado o como string
+                const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                if (data.type === 'output') {
+                    term.write(data.content);
+                } else if (data.type === 'resize') {
+                    term.resize(data.cols, data.rows);
+                }
+            } catch (e) {
+                console.error("Error receiving message in WebView:", e);
+            }
+        });
+    </script>
+</body>
+</html>

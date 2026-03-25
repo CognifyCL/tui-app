@@ -1,0 +1,12 @@
+services:
+  tui-proxy:
+    build: ./proxy-server
+    container_name: tui-proxy-server
+    ports:
+      - "4000:3000"
+    restart: always
+    # El servidor proxy necesita acceder a los dispositivos PTY del host
+    # si queres máxima compatibilidad con tmux
+    privileged: true
+    environment:
+      - NODE_ENV=production
