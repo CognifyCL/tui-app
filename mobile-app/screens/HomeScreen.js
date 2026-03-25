@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, ScrollView, RefreshControl } from 'react-native';
 import { Text, TextInput, Button, Card, Chip, ActivityIndicator, List, useTheme } from 'react-native-paper';
 import { useTerminal } from '../hooks/useTerminal';
@@ -18,6 +18,14 @@ export default function HomeScreen({ navigation }) {
     recentHosts, connect, status
   } = useTerminal();
   const { log } = useLogger();
+  const autoFetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (serverIp && !autoFetchedRef.current) {
+      autoFetchedRef.current = true;
+      fetchSessions();
+    }
+  }, [serverIp]);
 
   const fetchSessions = async () => {
     if (!serverIp) {
