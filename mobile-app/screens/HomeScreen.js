@@ -124,8 +124,9 @@ export default function HomeScreen({ navigation }) {
                   key={idx}
                   title={s}
                   onPress={() => {
-                    setSessionName(s);
                     Haptics.selectionAsync();
+                    connect(serverIp, s);
+                    navigation.navigate('Terminal');
                   }}
                   left={props => <List.Icon {...props} icon="terminal" />}
                   right={props => sessionName === s ? <List.Icon {...props} icon="check" color={theme.colors.primary} /> : null}
