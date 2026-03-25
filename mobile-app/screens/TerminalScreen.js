@@ -39,7 +39,7 @@ export default function TerminalScreen({ navigation }) {
     { label: 'PgUp', value: '\x1b[5~' }, { label: 'PgDn', value: '\x1b[6~' }, { label: 'Home', value: '\x1b[H' },
     { label: 'End', value: '\x1b[F' }, { label: 'Del', value: '\x1b[3~' }, { label: '↑', value: '\x1b[A' },
     { label: '↓', value: '\x1b[B' }, { label: '←', value: '\x1b[D' }, { label: '→', value: '\x1b[C' },
-    { label: 'F1', value: '\x1bOP' }, { label: 'F2', value: '\x1bOQ' }, { label: 'F3', value: '\x1bOQ' },
+    { label: 'F1', value: '\x1bOP' }, { label: 'F2', value: '\x1bOQ' }, { label: 'F3', value: '\x1bOR' },
   ];
 
   const sendKey = (val) => {

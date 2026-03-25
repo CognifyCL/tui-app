@@ -1,13 +1,13 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Text, Button } from 'react-native-paper';
-import { useLogger } from '../hooks/useLogger';
+import { useTerminal } from '../hooks/useTerminal';
 import LogViewer from '../components/LogViewer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function LogsScreen() {
   const insets = useSafeAreaInsets();
-  const { logs, clearLogs } = useLogger();
+  const { logs, clearLogs } = useTerminal();
 
   return (
     <View style={styles.container}>

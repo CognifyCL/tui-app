@@ -18,7 +18,7 @@ export const TerminalProvider = ({ children }) => {
   const [windows, setWindows] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [recentHosts, setRecentHosts] = useState([]);
-  const { log } = useLogger();
+  const { log, logs, clearLogs } = useLogger();
   
   const listeners = useRef([]);
 
@@ -153,7 +153,8 @@ export const TerminalProvider = ({ children }) => {
     <TerminalContext.Provider value={{
       ws, status, serverIp, sessionName, sessions, windows, isRefreshing, recentHosts,
       setServerIp, setSessionName, setSessions, setIsRefreshing,
-      connect, disconnect, sendInput, sendResize, runTmuxCommand, addListener
+      connect, disconnect, sendInput, sendResize, runTmuxCommand, addListener,
+      logs, clearLogs
     }}>
       {children}
     </TerminalContext.Provider>
