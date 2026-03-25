@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import { createDrawerNavigator } from '@react-navigation/drawer';
-import { IconButton } from 'react-native-paper';
+import { IconButton, useTheme } from 'react-native-paper';
 
 // Screens
 import HomeScreen from '../screens/HomeScreen';
@@ -13,6 +13,8 @@ import SettingsScreen from '../screens/SettingsScreen';
 const Drawer = createDrawerNavigator();
 
 export default function AppNavigator() {
+  const theme = useTheme();
+
   return (
     <Drawer.Navigator
       initialRouteName="Home"
@@ -25,46 +27,46 @@ export default function AppNavigator() {
         ),
         drawerType: 'front',
         headerStyle: {
-          backgroundColor: '#1e1e1e',
+          backgroundColor: theme.colors.surface,
         },
-        headerTintColor: '#fff',
+        headerTintColor: theme.colors.onSurface,
         headerTitleStyle: {
           fontWeight: 'bold',
         },
       })}
     >
-      <Drawer.Screen 
-        name="Home" 
-        component={HomeScreen} 
+      <Drawer.Screen
+        name="Home"
+        component={HomeScreen}
         options={{ title: 'Connect' }}
       />
-      <Drawer.Screen 
-        name="Terminal" 
-        component={TerminalScreen} 
-        options={{ 
+      <Drawer.Screen
+        name="Terminal"
+        component={TerminalScreen}
+        options={{
           headerShown: false,
         }}
       />
-      <Drawer.Screen 
-        name="Hosts" 
-        component={HostsScreen} 
+      <Drawer.Screen
+        name="Hosts"
+        component={HostsScreen}
         options={{ title: 'Manage Hosts' }}
       />
-      <Drawer.Screen 
-        name="Snippets" 
-        component={SnippetsScreen} 
+      <Drawer.Screen
+        name="Snippets"
+        component={SnippetsScreen}
         options={{ title: 'Snippets' }}
       />
-      <Drawer.Screen 
-        name="Logs" 
-        component={LogsScreen} 
-        options={{ 
+      <Drawer.Screen
+        name="Logs"
+        component={LogsScreen}
+        options={{
           title: 'System Logs',
         }}
       />
-      <Drawer.Screen 
-        name="Settings" 
-        component={SettingsScreen} 
+      <Drawer.Screen
+        name="Settings"
+        component={SettingsScreen}
         options={{ title: 'Settings' }}
       />
     </Drawer.Navigator>

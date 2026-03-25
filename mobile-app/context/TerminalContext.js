@@ -1,12 +1,17 @@
-import React, { createContext, useState, useRef, useEffect } from 'react';
+import React, { createContext, useState, useRef, useEffect, useContext } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { resolveHost } from '../utils/url';
 import { useLogger } from '../hooks/useLogger';
+import { ThemeContext } from './ThemeContext';
 
 export const TerminalContext = createContext();
 
-const STORAGE_KEYS = {
+export const TERMINAL_STORAGE_KEYS = {
   RECENT_HOSTS: '@cognifycl/recent_hosts',
+};
+
+const persistHosts = async (hosts) => {
+  await AsyncStorage.setItem(TERMINAL_STORAGE_KEYS.RECENT_HOSTS, JSON.stringify(hosts));
 };
 
 const RECONNECT_MAX_ATTEMPTS = 10;
@@ -14,6 +19,9 @@ const RECONNECT_BASE_DELAY_MS = 1000;
 const RECONNECT_MAX_DELAY_MS = 30000;
 
 export const TerminalProvider = ({ children }) => {
+  const themeContext = useContext(ThemeContext);
+  const logLevel = themeContext?.logLevel ?? 'DEBUG';
+
   const [ws, setWs] = useState(null);
   const [status, setStatus] = useState('Disconnected');
   const [serverIp, setServerIp] = useState('');
@@ -22,7 +30,7 @@ export const TerminalProvider = ({ children }) => {
   const [windows, setWindows] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [recentHosts, setRecentHosts] = useState([]);
-  const { log, logs, clearLogs } = useLogger();
+  const { log, logs, clearLogs } = useLogger(200, logLevel);
 
   const listeners = useRef([]);
   const reconnectTimeoutRef = useRef(null);
@@ -43,7 +51,7 @@ export const TerminalProvider = ({ children }) => {
 
   const loadHosts = async () => {
     try {
-      const data = await AsyncStorage.getItem(STORAGE_KEYS.RECENT_HOSTS);
+      const data = await AsyncStorage.getItem(TERMINAL_STORAGE_KEYS.RECENT_HOSTS);
       if (data) {
         const hosts = JSON.parse(data);
         const sorted = hosts.sort((a, b) => b.lastUsed - a.lastUsed);
@@ -59,22 +67,84 @@ export const TerminalProvider = ({ children }) => {
 
   const saveHost = async (ip) => {
     try {
-      const existing = await AsyncStorage.getItem(STORAGE_KEYS.RECENT_HOSTS);
+      const existing = await AsyncStorage.getItem(TERMINAL_STORAGE_KEYS.RECENT_HOSTS);
       let hosts = existing ? JSON.parse(existing) : [];
-      
+
       const index = hosts.findIndex(h => h.ip === ip);
       if (index !== -1) {
         hosts[index].lastUsed = Date.now();
       } else {
-        hosts.push({ ip, lastUsed: Date.now() });
+        hosts.push({ ip, name: '', lastUsed: Date.now() });
       }
 
       const sorted = hosts.sort((a, b) => b.lastUsed - a.lastUsed).slice(0, 10);
       setRecentHosts(sorted);
-      await AsyncStorage.setItem(STORAGE_KEYS.RECENT_HOSTS, JSON.stringify(sorted));
+      await persistHosts(sorted);
     } catch (error) {
       log(`Error saving host: ${error.message}`, 'error');
     }
+  };
+
+  const addHost = async ({ name, ip }) => {
+    try {
+      const existing = await AsyncStorage.getItem(TERMINAL_STORAGE_KEYS.RECENT_HOSTS);
+      let hosts = existing ? JSON.parse(existing) : [];
+      const index = hosts.findIndex(h => h.ip === ip);
+      if (index !== -1) {
+        hosts[index].name = name;
+        hosts[index].lastUsed = Date.now();
+      } else {
+        hosts.push({ ip, name, lastUsed: Date.now() });
+      }
+      const sorted = hosts.sort((a, b) => b.lastUsed - a.lastUsed).slice(0, 10);
+      setRecentHosts(sorted);
+      await persistHosts(sorted);
+    } catch (error) {
+      log(`Error adding host: ${error.message}`, 'error');
+    }
+  };
+
+  const editHost = async (originalIp, { name, ip }) => {
+    try {
+      const updated = recentHosts.map(h =>
+        h.ip === originalIp ? { ...h, ip, name } : h
+      );
+      setRecentHosts(updated);
+      await persistHosts(updated);
+    } catch (error) {
+      log(`Error editing host: ${error.message}`, 'error');
+    }
+  };
+
+  const deleteHost = async (ip) => {
+    try {
+      const updated = recentHosts.filter(h => h.ip !== ip);
+      setRecentHosts(updated);
+      await persistHosts(updated);
+    } catch (error) {
+      log(`Error deleting host: ${error.message}`, 'error');
+    }
+  };
+
+  /**
+   * Clears all app AsyncStorage keys and resets in-memory state.
+   * Called by SettingsScreen Clear Cache / Reset All.
+   */
+  const clearAllStorage = async () => {
+    const allKeys = [
+      TERMINAL_STORAGE_KEYS.RECENT_HOSTS,
+      '@cognifycl/dark_mode',
+      '@cognifycl/log_level',
+      '@cognifycl/snippets',
+    ];
+
+    await AsyncStorage.multiRemove(allKeys);
+
+    // Reset in-memory state
+    setRecentHosts([]);
+    setServerIp('');
+    setSessionName('default');
+    clearLogs();
   };
 
   useEffect(() => {
@@ -215,7 +285,8 @@ export const TerminalProvider = ({ children }) => {
       ws, status, serverIp, sessionName, sessions, windows, isRefreshing, recentHosts,
       setServerIp, setSessionName, setSessions, setIsRefreshing,
       connect, disconnect, sendInput, sendResize, runTmuxCommand, addListener,
-      logs, clearLogs
+      addHost, editHost, deleteHost,
+      logs, clearLogs, clearAllStorage,
     }}>
       {children}
     </TerminalContext.Provider>
