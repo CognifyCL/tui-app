@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, Keyboard } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Text, IconButton, FAB, Portal } from 'react-native-paper';
 import { useTerminal } from '../hooks/useTerminal';
@@ -9,9 +9,10 @@ import { useIsFocused } from '@react-navigation/native';
 export default function TerminalScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
-  const { ws, status, addListener, sendInput, sendResize, windows, runTmuxCommand } = useTerminal();
+  const { ws, status, addListener, sendInput, sendResize, windows, runTmuxCommand, serverIp, sessionName } = useTerminal();
   const [fabOpen, setFabOpen] = useState(false);
   const [toolbarHeight, setToolbarHeight] = useState(0);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const toolbarHeightRef = useRef(0);
   const isFocused = useIsFocused();
 
@@ -24,6 +25,15 @@ export default function TerminalScreen({ navigation }) {
     });
     return unsubscribe;
   }, [addListener]);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const handleWebViewMessage = (event) => {
     try {
@@ -50,11 +60,10 @@ export default function TerminalScreen({ navigation }) {
     sendInput(val);
   };
 
+  const activeWindow = windows && windows.find((w) => w.active === true);
+  const activeWindowLabel = activeWindow ? `${activeWindow.id}:${activeWindow.name}` : '—';
+
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
         <IconButton icon="menu" onPress={() => navigation.openDrawer()} />
@@ -96,6 +105,14 @@ export default function TerminalScreen({ navigation }) {
         </View>
       )}
 
+      {ws && (
+        <View style={styles.infoBar}>
+          <Text style={styles.infoText}><Text style={styles.infoLabel}>host: </Text>{serverIp}</Text>
+          <Text style={styles.infoText}><Text style={styles.infoLabel}>session: </Text>{sessionName}</Text>
+          <Text style={styles.infoText}><Text style={styles.infoLabel}>window: </Text>{activeWindowLabel}</Text>
+        </View>
+      )}
+
       <View
         style={[styles.toolbarContainer, { paddingBottom: Math.max(insets.bottom, 8) }]}
         onLayout={(e) => {
@@ -127,11 +144,10 @@ export default function TerminalScreen({ navigation }) {
           ]}
           onStateChange={({ open }) => setFabOpen(open)}
           fabStyle={{ backgroundColor: '#0f0' }}
-          style={{ bottom: toolbarHeight + insets.bottom }}
+          style={{ bottom: toolbarHeight + insets.bottom + keyboardHeight }}
         />
       </Portal>
     </View>
-    </KeyboardAvoidingView>
   );
 }
 
@@ -155,6 +171,9 @@ const styles = StyleSheet.create({
   activeWindowItem: { backgroundColor: '#0f0' },
   windowText: { color: '#ccc', fontSize: 11, fontWeight: 'bold' },
   activeWindowText: { color: '#000' },
+  infoBar: { height: 24, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: '#111' },
+  infoText: { color: '#555', fontSize: 10, fontFamily: 'monospace' },
+  infoLabel: { color: '#333' },
   toolbarContainer: { backgroundColor: '#1e1e1e', borderTopWidth: 1, borderTopColor: '#333' },
   toolbarContent: { padding: 8, flexDirection: 'row' },
   keyButton: { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#333', borderRadius: 4, marginRight: 8, minWidth: 40, alignItems: 'center' },
