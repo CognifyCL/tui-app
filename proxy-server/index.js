@@ -109,6 +109,8 @@ wss.on('connection', (ws, req) => {
       } else if (data.type === 'resize') {
         // Redimensionamiento de la terminal (SIGWINCH)
         ptyProcess.resize(data.cols, data.rows);
+      } else if (data.type === 'get-windows') {
+        broadcastWindows();
       } else if (data.type === 'tmux-cmd') {
         // Structured tmux command (Phase 1.1)
         const allowedCommands = ['select-window', 'split-window', 'resize-pane', 'zoom-pane', 'kill-pane'];

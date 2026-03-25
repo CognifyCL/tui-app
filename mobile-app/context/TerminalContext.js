@@ -174,6 +174,7 @@ export const TerminalProvider = ({ children }) => {
         saveHost(ip);
         log(`WebSocket Connected to ${wsUrl}`, 'success');
         if (__DEV__) console.info(`[TUI][INFO]  WS connected to ${ip}`);
+        socket.send(JSON.stringify({ type: 'get-windows' }));
       };
 
       socket.onmessage = (event) => {

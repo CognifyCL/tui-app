@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { StyleSheet, View, ScrollView, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Text, IconButton, FAB, Portal } from 'react-native-paper';
 import { useTerminal } from '../hooks/useTerminal';
@@ -11,6 +11,8 @@ export default function TerminalScreen({ navigation }) {
   const webViewRef = useRef(null);
   const { ws, status, addListener, sendInput, sendResize, windows, runTmuxCommand } = useTerminal();
   const [fabOpen, setFabOpen] = useState(false);
+  const [toolbarHeight, setToolbarHeight] = useState(0);
+  const toolbarHeightRef = useRef(0);
   const isFocused = useIsFocused();
 
   useEffect(() => {
@@ -49,6 +51,10 @@ export default function TerminalScreen({ navigation }) {
   };
 
   return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
     <View style={styles.container}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
         <IconButton icon="menu" onPress={() => navigation.openDrawer()} />
@@ -90,7 +96,14 @@ export default function TerminalScreen({ navigation }) {
         </View>
       )}
 
-      <View style={[styles.toolbarContainer, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+      <View
+        style={[styles.toolbarContainer, { paddingBottom: Math.max(insets.bottom, 8) }]}
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          toolbarHeightRef.current = h;
+          setToolbarHeight(h);
+        }}
+      >
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.toolbarContent}>
           {specialKeys.map((k, i) => (
             <TouchableOpacity key={i} style={styles.keyButton} onPress={() => sendKey(k.value)}>
@@ -114,9 +127,11 @@ export default function TerminalScreen({ navigation }) {
           ]}
           onStateChange={({ open }) => setFabOpen(open)}
           fabStyle={{ backgroundColor: '#0f0' }}
+          style={{ bottom: toolbarHeight + insets.bottom }}
         />
       </Portal>
     </View>
+    </KeyboardAvoidingView>
   );
 }
 
