@@ -113,7 +113,7 @@ export default function TerminalScreen({ navigation }) {
             { icon: 'trash-can-outline', label: 'Kill Pane', onPress: () => runTmuxCommand('kill-pane') },
           ]}
           onStateChange={({ open }) => setFabOpen(open)}
-          fabStyle={{ backgroundColor: '#0f0', bottom: 100 }}
+          fabStyle={{ backgroundColor: '#0f0' }}
         />
       </Portal>
     </View>
