@@ -9,6 +9,10 @@ const STORAGE_KEYS = {
   RECENT_HOSTS: '@cognifycl/recent_hosts',
 };
 
+const RECONNECT_MAX_ATTEMPTS = 10;
+const RECONNECT_BASE_DELAY_MS = 1000;
+const RECONNECT_MAX_DELAY_MS = 30000;
+
 export const TerminalProvider = ({ children }) => {
   const [ws, setWs] = useState(null);
   const [status, setStatus] = useState('Disconnected');
@@ -19,8 +23,12 @@ export const TerminalProvider = ({ children }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [recentHosts, setRecentHosts] = useState([]);
   const { log, logs, clearLogs } = useLogger();
-  
+
   const listeners = useRef([]);
+  const reconnectTimeoutRef = useRef(null);
+  const reconnectAttemptRef = useRef(0);
+  const reconnectParamsRef = useRef(null); // { ip, session }
+  const manualDisconnectRef = useRef(false);
 
   const addListener = (callback) => {
     listeners.current.push(callback);
@@ -73,17 +81,22 @@ export const TerminalProvider = ({ children }) => {
     loadHosts();
   }, []);
 
-  const connect = (ip, session) => {
-    if (ws) ws.close();
-    
-    setStatus('Connecting...');
+  const cancelReconnect = () => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+  };
+
+  const connectWebSocket = (ip, session) => {
     const { wsUrl } = resolveHost(ip);
     log(`Connecting to ${wsUrl} (session: ${session})...`, 'info');
-    
+
     try {
       const socket = new WebSocket(`${wsUrl}?session=${session}`);
 
       socket.onopen = () => {
+        reconnectAttemptRef.current = 0;
         setStatus(`Connected: ${session}`);
         setWs(socket);
         setServerIp(ip);
@@ -109,12 +122,39 @@ export const TerminalProvider = ({ children }) => {
         setStatus(`Error: Check Host/Port`);
         log(`WebSocket Error: Check if server is running on ${wsUrl}`, 'error');
       };
-      
+
       socket.onclose = () => {
-        setStatus('Disconnected');
         setWs(null);
         setWindows([]);
-        log('WebSocket Disconnected', 'info');
+
+        if (manualDisconnectRef.current) {
+          setStatus('Disconnected');
+          log('WebSocket Disconnected', 'info');
+          return;
+        }
+
+        const attempt = reconnectAttemptRef.current + 1;
+        if (attempt > RECONNECT_MAX_ATTEMPTS) {
+          setStatus('Disconnected');
+          log('WebSocket Disconnected — max reconnect attempts reached', 'error');
+          return;
+        }
+
+        reconnectAttemptRef.current = attempt;
+        const delay = Math.min(
+          RECONNECT_BASE_DELAY_MS * Math.pow(2, attempt - 1),
+          RECONNECT_MAX_DELAY_MS
+        );
+        setStatus(`Reconnecting (${attempt}/${RECONNECT_MAX_ATTEMPTS})...`);
+        log(`WebSocket closed — reconnecting in ${delay / 1000}s (attempt ${attempt}/${RECONNECT_MAX_ATTEMPTS})`, 'info');
+
+        reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = null;
+          const params = reconnectParamsRef.current;
+          if (params && !manualDisconnectRef.current) {
+            connectWebSocket(params.ip, params.session);
+          }
+        }, delay);
       };
     } catch (error) {
       log(`Connection failed: ${error.message}`, 'error');
@@ -122,7 +162,22 @@ export const TerminalProvider = ({ children }) => {
     }
   };
 
+  const connect = (ip, session) => {
+    cancelReconnect();
+    manualDisconnectRef.current = false;
+    reconnectAttemptRef.current = 0;
+    reconnectParamsRef.current = { ip, session };
+
+    if (ws) ws.close();
+
+    setStatus('Connecting...');
+    connectWebSocket(ip, session);
+  };
+
   const disconnect = () => {
+    cancelReconnect();
+    manualDisconnectRef.current = true;
+    reconnectAttemptRef.current = 0;
     if (ws) {
       ws.close();
       setWs(null);
@@ -130,6 +185,12 @@ export const TerminalProvider = ({ children }) => {
       setStatus('Disconnected');
     }
   };
+
+  useEffect(() => {
+    return () => {
+      cancelReconnect();
+    };
+  }, []);
 
   const sendInput = (content) => {
     if (ws && ws.readyState === WebSocket.OPEN) {
