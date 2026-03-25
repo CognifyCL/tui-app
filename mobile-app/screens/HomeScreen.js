@@ -1,6 +1,15 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { StyleSheet, View, ScrollView, RefreshControl } from 'react-native';
-import { Text, TextInput, Button, Card, Chip, ActivityIndicator, List, useTheme } from 'react-native-paper';
+import {
+  Text,
+  Button,
+  List,
+  Portal,
+  Dialog,
+  TextInput,
+  IconButton,
+  useTheme,
+} from 'react-native-paper';
 import { useTerminal } from '../hooks/useTerminal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { resolveHost } from '../utils/url';
@@ -10,16 +19,42 @@ import * as Haptics from 'expo-haptics';
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const { 
-    serverIp, setServerIp, 
-    sessionName, setSessionName, 
+  const {
+    serverIp,
     sessions, setSessions,
     isRefreshing, setIsRefreshing,
-    recentHosts, connect, status
+    connect, status,
   } = useTerminal();
   const { log } = useLogger();
   const autoFetchedRef = useRef(false);
 
+  const [dialogVisible, setDialogVisible] = useState(false);
+  const [newSessionName, setNewSessionName] = useState('default');
+
+  // Derive currently-connected session name from status string ("Connected: <name>")
+  const connectedSession = status.startsWith('Connected: ')
+    ? status.slice('Connected: '.length)
+    : null;
+
+  // Register the + header button
+  const showDialog = useCallback(() => {
+    setNewSessionName('default');
+    setDialogVisible(true);
+  }, []);
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <IconButton
+          icon="plus"
+          onPress={showDialog}
+          iconColor={theme.colors.onSurface}
+        />
+      ),
+    });
+  }, [navigation, showDialog, theme.colors.onSurface]);
+
+  // Auto-fetch sessions once when serverIp becomes available
   useEffect(() => {
     if (serverIp && !autoFetchedRef.current) {
       autoFetchedRef.current = true;
@@ -29,14 +64,14 @@ export default function HomeScreen({ navigation }) {
 
   const fetchSessions = async () => {
     if (!serverIp) {
-      log('Please enter a host address first', 'error');
+      log('No host configured', 'error');
       return;
     }
 
     const { httpUrl } = resolveHost(serverIp);
     setIsRefreshing(true);
     log(`Fetching sessions from ${httpUrl}/sessions...`, 'info');
-    
+
     try {
       const response = await fetch(`${httpUrl}/sessions`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -53,121 +88,139 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const handleConnect = () => {
+  const handleCreateSession = () => {
+    setDialogVisible(false);
+    connect(serverIp, newSessionName);
+    navigation.navigate('Terminal');
+  };
+
+  const handleConnectSession = (sessionName) => {
+    Haptics.selectionAsync();
     connect(serverIp, sessionName);
     navigation.navigate('Terminal');
   };
 
-  return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-      contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
-      refreshControl={
-        <RefreshControl refreshing={isRefreshing} onRefresh={fetchSessions} />
-      }
-    >
-      <View style={styles.content}>
-        <Text variant="headlineMedium" style={styles.title}>🚀 TUI Manager</Text>
-        
-        <Card style={styles.card}>
-          <Card.Content>
-            <TextInput
-              label="Host Address"
-              value={serverIp}
-              onChangeText={setServerIp}
-              mode="outlined"
-              placeholder="e.g. 100.64.0.5"
-              autoCapitalize="none"
-              style={styles.input}
-            />
-
-            {recentHosts.length > 0 && (
-              <View style={styles.historyContainer}>
-                <Text variant="labelLarge" style={styles.label}>Recent Hosts:</Text>
-                <View style={styles.hostChips}>
-                  {recentHosts.map((h, i) => (
-                    <Chip 
-                      key={i} 
-                      selected={serverIp === h.ip}
-                      onPress={() => {
-                        setServerIp(h.ip);
-                        Haptics.selectionAsync();
-                      }}
-                      style={styles.chip}
-                    >
-                      {h.ip}
-                    </Chip>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            <TextInput
-              label="Session Name"
-              value={sessionName}
-              onChangeText={setSessionName}
-              mode="outlined"
-              placeholder="default"
-              autoCapitalize="none"
-              style={styles.input}
-            />
-          </Card.Content>
-        </Card>
-
-        <Card style={styles.card}>
-          <Card.Title title="Available Sessions" subtitle="Pull to refresh" />
-          <Card.Content>
-            {isRefreshing && <ActivityIndicator animating={true} style={styles.loader} />}
-            {sessions.length > 0 ? (
-              sessions.map((s, idx) => (
-                <List.Item
-                  key={idx}
-                  title={s}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    connect(serverIp, s);
-                    navigation.navigate('Terminal');
-                  }}
-                  left={props => <List.Icon {...props} icon="terminal" />}
-                  right={props => sessionName === s ? <List.Icon {...props} icon="check" color={theme.colors.primary} /> : null}
-                />
-              ))
-            ) : (
-              <Text style={[styles.noSessions, { color: theme.colors.onSurfaceVariant }]}>
-                {serverIp ? "No active sessions found." : "Enter a host IP to discover sessions."}
-              </Text>
-            )}
-          </Card.Content>
-        </Card>
-
-        <Button 
-          mode="contained" 
-          onPress={handleConnect} 
-          style={styles.connectButton}
-          contentStyle={styles.connectButtonContent}
+  // Empty state: no host configured
+  if (!serverIp) {
+    return (
+      <View style={[styles.emptyContainer, { backgroundColor: theme.colors.background }]}>
+        <Text
+          variant="bodyLarge"
+          style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}
         >
-          CONNECT
+          No host configured. Add one in Hosts.
+        </Text>
+        <Button
+          mode="contained"
+          onPress={() => navigation.navigate('Hosts')}
+          style={styles.emptyButton}
+        >
+          Go to Hosts
         </Button>
-        
-        <Text style={[styles.status, { color: theme.colors.onSurfaceVariant }]}>Status: {status}</Text>
       </View>
-    </ScrollView>
+    );
+  }
+
+  return (
+    <>
+      <ScrollView
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 20 },
+        ]}
+        refreshControl={
+          <RefreshControl refreshing={isRefreshing} onRefresh={fetchSessions} />
+        }
+      >
+        {sessions.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text
+              variant="bodyLarge"
+              style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}
+            >
+              No active sessions. Create one with +
+            </Text>
+          </View>
+        ) : (
+          sessions.map((s, idx) => {
+            const isActive = s === connectedSession;
+            return (
+              <List.Item
+                key={idx}
+                title={s}
+                titleStyle={[styles.sessionTitle, isActive && styles.sessionTitleActive]}
+                style={[
+                  styles.sessionItem,
+                  isActive && { backgroundColor: theme.colors.primaryContainer },
+                ]}
+                onPress={() => handleConnectSession(s)}
+                left={(props) => (
+                  <List.Icon {...props} icon="terminal" />
+                )}
+                right={(props) => (
+                  <List.Icon {...props} icon="chevron-right" />
+                )}
+              />
+            );
+          })
+        )}
+      </ScrollView>
+
+      <Portal>
+        <Dialog
+          visible={dialogVisible}
+          onDismiss={() => setDialogVisible(false)}
+        >
+          <Dialog.Title>New Session</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              label="Session name"
+              value={newSessionName}
+              onChangeText={setNewSessionName}
+              mode="outlined"
+              autoFocus
+              autoCapitalize="none"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setDialogVisible(false)}>Cancel</Button>
+            <Button onPress={handleCreateSession}>Create</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { padding: 16 },
-  title: { marginBottom: 20, textAlign: 'center', fontWeight: 'bold' },
-  card: { marginBottom: 16 },
-  input: { marginBottom: 12 },
-  label: { marginBottom: 8 },
-  historyContainer: { marginBottom: 12 },
-  hostChips: { flexDirection: 'row', flexWrap: 'wrap' },
-  chip: { marginRight: 8, marginBottom: 8 },
-  loader: { marginVertical: 10 },
-  noSessions: { textAlign: 'center', padding: 20, fontStyle: 'italic' },
-  connectButton: { marginTop: 8, borderRadius: 8 },
-  connectButtonContent: { paddingVertical: 8 },
-  status: { marginTop: 16, textAlign: 'center', fontSize: 12 }
+  container: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  emptyText: {
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  emptyButton: {
+    minWidth: 160,
+  },
+  sessionItem: {
+    paddingVertical: 4,
+  },
+  sessionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  sessionTitleActive: {
+    fontWeight: '700',
+  },
 });

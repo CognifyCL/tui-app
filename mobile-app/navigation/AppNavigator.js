@@ -38,7 +38,7 @@ export default function AppNavigator() {
       <Drawer.Screen
         name="Home"
         component={HomeScreen}
-        options={{ title: 'Connect' }}
+        options={{ title: 'Sessions' }}
       />
       <Drawer.Screen
         name="Terminal"
