@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet, View, ScrollView, RefreshControl } from 'react-native';
-import { Text, TextInput, Button, Card, Chip, ActivityIndicator, List } from 'react-native-paper';
+import { Text, TextInput, Button, Card, Chip, ActivityIndicator, List, useTheme } from 'react-native-paper';
 import { useTerminal } from '../hooks/useTerminal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { resolveHost } from '../utils/url';
@@ -9,6 +9,7 @@ import * as Haptics from 'expo-haptics';
 
 export default function HomeScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const { 
     serverIp, setServerIp, 
     sessionName, setSessionName, 
@@ -50,8 +51,8 @@ export default function HomeScreen({ navigation }) {
   };
 
   return (
-    <ScrollView 
-      style={styles.container}
+    <ScrollView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
       contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
       refreshControl={
         <RefreshControl refreshing={isRefreshing} onRefresh={fetchSessions} />
@@ -123,7 +124,7 @@ export default function HomeScreen({ navigation }) {
                 />
               ))
             ) : (
-              <Text style={styles.noSessions}>
+              <Text style={[styles.noSessions, { color: theme.colors.onSurfaceVariant }]}>
                 {serverIp ? "No active sessions found." : "Enter a host IP to discover sessions."}
               </Text>
             )}
@@ -139,14 +140,14 @@ export default function HomeScreen({ navigation }) {
           CONNECT
         </Button>
         
-        <Text style={styles.status}>Status: {status}</Text>
+        <Text style={[styles.status, { color: theme.colors.onSurfaceVariant }]}>Status: {status}</Text>
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1 },
   content: { padding: 16 },
   title: { marginBottom: 20, textAlign: 'center', fontWeight: 'bold' },
   card: { marginBottom: 16 },
@@ -156,8 +157,8 @@ const styles = StyleSheet.create({
   hostChips: { flexDirection: 'row', flexWrap: 'wrap' },
   chip: { marginRight: 8, marginBottom: 8 },
   loader: { marginVertical: 10 },
-  noSessions: { textAlign: 'center', color: '#666', padding: 20, fontStyle: 'italic' },
+  noSessions: { textAlign: 'center', padding: 20, fontStyle: 'italic' },
   connectButton: { marginTop: 8, borderRadius: 8 },
   connectButtonContent: { paddingVertical: 8 },
-  status: { marginTop: 16, textAlign: 'center', color: '#666', fontSize: 12 }
+  status: { marginTop: 16, textAlign: 'center', fontSize: 12 }
 });

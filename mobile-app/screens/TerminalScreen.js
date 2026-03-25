@@ -4,12 +4,14 @@ import { WebView } from 'react-native-webview';
 import { Text, IconButton, FAB, Portal } from 'react-native-paper';
 import { useTerminal } from '../hooks/useTerminal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useIsFocused } from '@react-navigation/native';
 
 export default function TerminalScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
   const { ws, status, addListener, sendInput, sendResize, windows, runTmuxCommand } = useTerminal();
   const [fabOpen, setFabOpen] = useState(false);
+  const isFocused = useIsFocused();
 
   useEffect(() => {
     const unsubscribe = addListener((data) => {
@@ -102,7 +104,7 @@ export default function TerminalScreen({ navigation }) {
       <Portal>
         <FAB.Group
           open={fabOpen}
-          visible={true}
+          visible={isFocused}
           icon={fabOpen ? 'close' : 'console'}
           actions={[
             { icon: 'view-split-vertical', label: 'Split H', onPress: () => runTmuxCommand('split-window -h') },
