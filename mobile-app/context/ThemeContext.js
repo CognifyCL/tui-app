@@ -1,5 +1,45 @@
 import React, { createContext, useState, useEffect, useContext, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MD3DarkTheme } from 'react-native-paper';
+
+export const kineticColors = {
+  primary: '#52fd2e',
+  onPrimary: '#0e5b00',
+  primaryContainer: '#34e507',
+  background: '#0e0e0e',
+  surface: '#0e0e0e',
+  surfaceContainer: '#1a1a1a',
+  surfaceContainerLow: '#131313',
+  surfaceContainerHigh: '#20201f',
+  surfaceContainerHighest: '#262626',
+  onBackground: '#ffffff',
+  onSurface: '#ffffff',
+  onSurfaceVariant: '#adaaaa',
+  outline: '#767575',
+  outlineVariant: '#484847',
+  error: '#ff7351',
+  errorContainer: '#b92902',
+};
+
+export const kineticTheme = {
+  ...MD3DarkTheme,
+  colors: {
+    ...MD3DarkTheme.colors,
+    primary: kineticColors.primary,
+    onPrimary: kineticColors.onPrimary,
+    primaryContainer: kineticColors.primaryContainer,
+    background: kineticColors.background,
+    surface: kineticColors.surface,
+    onBackground: kineticColors.onBackground,
+    onSurface: kineticColors.onSurface,
+    onSurfaceVariant: kineticColors.onSurfaceVariant,
+    outline: kineticColors.outline,
+    outlineVariant: kineticColors.outlineVariant,
+    error: kineticColors.error,
+    errorContainer: kineticColors.errorContainer,
+    surfaceVariant: kineticColors.surfaceContainerHighest,
+  },
+};
 
 export const ThemeContext = createContext();
 

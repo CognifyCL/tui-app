@@ -1,16 +1,40 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { StyleSheet, View, ScrollView, TouchableOpacity, Keyboard } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { Text, IconButton, FAB, Portal, Menu } from 'react-native-paper';
+import { Text, FAB, Portal, Menu } from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTerminal } from '../hooks/useTerminal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { useThemeContext } from '../context/ThemeContext';
 
+const C = {
+  bg: '#0e0e0e',
+  black: '#000000',
+  surface: '#1a1a1a',
+  surfaceHigh: '#20201f',
+  primary: '#52fd2e',
+  onPrimary: '#000000',
+  muted: '#adaaaa',
+  mutedDark: '#333333',
+  outline: '#484847',
+};
+
 export default function TerminalScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
-  const { ws, status, addListener, sendInput, sendResize, windows, runTmuxCommand, disconnect, serverIp, sessionName } = useTerminal();
+  const {
+    ws,
+    status,
+    addListener,
+    sendInput,
+    sendResize,
+    windows,
+    runTmuxCommand,
+    disconnect,
+    serverIp,
+    sessionName,
+  } = useTerminal();
   const { isDarkMode, fontSize } = useThemeContext();
   const [fabOpen, setFabOpen] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
@@ -19,18 +43,24 @@ export default function TerminalScreen({ navigation }) {
   const toolbarHeightRef = useRef(0);
   const isFocused = useIsFocused();
 
+  // Terminal data bridge
   useEffect(() => {
     const unsubscribe = addListener((data) => {
       if (webViewRef.current) {
         const escapedContent = JSON.stringify(data);
-        webViewRef.current.injectJavaScript(`if(window.onTerminalData) window.onTerminalData(${escapedContent}); true;`);
+        webViewRef.current.injectJavaScript(
+          `if(window.onTerminalData) window.onTerminalData(${escapedContent}); true;`
+        );
       }
     });
     return unsubscribe;
   }, [addListener]);
 
+  // Keyboard height tracking
   useEffect(() => {
-    const showSub = Keyboard.addListener('keyboardDidShow', (e) => setKeyboardHeight(e.endCoordinates.height));
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) =>
+      setKeyboardHeight(e.endCoordinates.height)
+    );
     const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
     return () => {
       showSub.remove();
@@ -38,12 +68,14 @@ export default function TerminalScreen({ navigation }) {
     };
   }, []);
 
+  // Theme injection
   useEffect(() => {
     if (webViewRef.current) {
       webViewRef.current.injectJavaScript(`window.setTerminalTheme(${isDarkMode}); true;`);
     }
   }, [isDarkMode]);
 
+  // Font size injection
   useEffect(() => {
     if (webViewRef.current) {
       webViewRef.current.injectJavaScript(`window.setFontSize(${fontSize}); true;`);
@@ -72,61 +104,133 @@ export default function TerminalScreen({ navigation }) {
   };
 
   const specialKeys = [
-    { label: 'Esc', value: '\x1b' }, { label: 'Tab', value: '\t' }, { label: 'Prefix', value: '\x02' },
-    { label: 'PgUp', value: '\x1b[5~' }, { label: 'PgDn', value: '\x1b[6~' }, { label: 'Home', value: '\x1b[H' },
-    { label: 'End', value: '\x1b[F' }, { label: 'Del', value: '\x1b[3~' }, { label: '↑', value: '\x1b[A' },
-    { label: '↓', value: '\x1b[B' }, { label: '←', value: '\x1b[D' }, { label: '→', value: '\x1b[C' },
-    { label: 'F1', value: '\x1bOP' }, { label: 'F2', value: '\x1bOQ' }, { label: 'F3', value: '\x1bOR' },
+    { label: 'Esc', value: '\x1b' },
+    { label: 'Tab', value: '\t' },
+    { label: 'Prefix', value: '\x02' },
+    { label: 'PgUp', value: '\x1b[5~' },
+    { label: 'PgDn', value: '\x1b[6~' },
+    { label: 'Home', value: '\x1b[H' },
+    { label: 'End', value: '\x1b[F' },
+    { label: 'Del', value: '\x1b[3~' },
+    { label: '↑', value: '\x1b[A' },
+    { label: '↓', value: '\x1b[B' },
+    { label: '←', value: '\x1b[D' },
+    { label: '→', value: '\x1b[C' },
+    { label: 'F1', value: '\x1bOP' },
+    { label: 'F2', value: '\x1bOQ' },
+    { label: 'F3', value: '\x1bOR' },
   ];
 
-  const sendKey = (val) => {
-    sendInput(val);
-  };
+  const sendKey = (val) => sendInput(val);
 
   const activeWindow = windows && windows.find((w) => w.active === true);
   const activeWindowLabel = activeWindow ? `${activeWindow.id}:${activeWindow.name}` : '—';
 
+  const hasWindows = windows && windows.length > 0;
+
   return (
-    <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
-        <IconButton icon="menu" onPress={() => navigation.openDrawer()} />
-        <Text style={styles.statusText}>{status}</Text>
-        <Menu
-          visible={menuVisible}
-          onDismiss={() => setMenuVisible(false)}
-          anchor={
-            <IconButton icon="dots-vertical" onPress={() => setMenuVisible(true)} />
-          }
-        >
-          <Menu.Item
-            leadingIcon="power-plug-off"
-            onPress={() => { setMenuVisible(false); disconnect(); }}
-            title="Disconnect"
-          />
-          <Menu.Item
-            leadingIcon="content-copy"
-            onPress={() => {
-              setMenuVisible(false);
-              webViewRef.current?.injectJavaScript('window.copyLastOutput && window.copyLastOutput(); true;');
-            }}
-            title="Copy last output"
-          />
-          <Menu.Item
-            leadingIcon="delete-sweep"
-            onPress={() => {
-              setMenuVisible(false);
-              webViewRef.current?.injectJavaScript('term.clear(); true;');
-            }}
-            title="Clear terminal"
-          />
-          <Menu.Item
-            leadingIcon="plus-box-outline"
-            onPress={() => { setMenuVisible(false); runTmuxCommand('new-window'); }}
-            title="New window"
-          />
-        </Menu>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      {/* ── App Header ── */}
+      <View style={styles.header}>
+        {/* Left: icon + title */}
+        <View style={styles.headerLeft}>
+          <MaterialCommunityIcons name="console" size={20} color={C.primary} style={styles.headerIcon} />
+          <Text style={styles.headerTitle}>KINETIC_CONSOLE</Text>
+        </View>
+
+        {/* Right: search + menu */}
+        <View style={styles.headerRight}>
+          <TouchableOpacity onPress={() => {}} style={styles.headerIconBtn}>
+            <MaterialCommunityIcons name="magnify" size={20} color={C.muted} />
+          </TouchableOpacity>
+          <Menu
+            visible={menuVisible}
+            onDismiss={() => setMenuVisible(false)}
+            anchor={
+              <TouchableOpacity onPress={() => setMenuVisible(true)} style={styles.headerIconBtn}>
+                <MaterialCommunityIcons name="dots-vertical" size={20} color={C.muted} />
+              </TouchableOpacity>
+            }
+          >
+            <Menu.Item
+              leadingIcon="power-plug-off"
+              onPress={() => {
+                setMenuVisible(false);
+                disconnect();
+              }}
+              title="Disconnect"
+            />
+            <Menu.Item
+              leadingIcon="content-copy"
+              onPress={() => {
+                setMenuVisible(false);
+                webViewRef.current?.injectJavaScript(
+                  'window.copyLastOutput && window.copyLastOutput(); true;'
+                );
+              }}
+              title="Copy last output"
+            />
+            <Menu.Item
+              leadingIcon="delete-sweep"
+              onPress={() => {
+                setMenuVisible(false);
+                webViewRef.current?.injectJavaScript('term.clear(); true;');
+              }}
+              title="Clear terminal"
+            />
+            <Menu.Item
+              leadingIcon="plus-box-outline"
+              onPress={() => {
+                setMenuVisible(false);
+                runTmuxCommand('new-window');
+              }}
+              title="New window"
+            />
+          </Menu>
+        </View>
       </View>
-      
+
+      {/* ── Window Tabs Bar ── */}
+      {hasWindows && (
+        <View style={styles.tabsBar}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabsContent}
+          >
+            {windows.map((w) => (
+              <TouchableOpacity
+                key={w.id}
+                style={[styles.tab, w.active && styles.tabActive]}
+                onPress={() => runTmuxCommand(`select-window -t ${w.id}`)}
+              >
+                <Text style={[styles.tabText, w.active && styles.tabTextActive]}>
+                  {`${w.id}:${w.name.toUpperCase()}`}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (windows.length > 1) runTmuxCommand('kill-pane');
+                  }}
+                  style={styles.tabClose}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Text style={[styles.tabCloseText, w.active && styles.tabCloseTextActive]}>×</Text>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            ))}
+
+            {/* New window button */}
+            <TouchableOpacity
+              style={styles.tabNew}
+              onPress={() => runTmuxCommand('new-window')}
+            >
+              <Text style={styles.tabNewText}>+</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      )}
+
+      {/* ── Terminal WebView ── */}
       <View style={styles.terminalContainer}>
         <WebView
           ref={webViewRef}
@@ -135,7 +239,7 @@ export default function TerminalScreen({ navigation }) {
           onMessage={handleWebViewMessage}
           onLoad={handleWebViewLoad}
           style={styles.webview}
-          backgroundColor="#000"
+          backgroundColor={C.black}
           keyboardDisplayRequiresUserAction={false}
           automaticallyAdjustContentInsets={false}
           domStorageEnabled={true}
@@ -145,40 +249,29 @@ export default function TerminalScreen({ navigation }) {
         />
       </View>
 
-      {/* Window Switcher Footer (Phase 3.1, 3.2) */}
-      {windows && windows.length > 0 && (
-        <View style={styles.windowFooter}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.windowContent}>
-            {windows.map((w) => (
-              <TouchableOpacity 
-                key={w.id} 
-                style={[styles.windowItem, w.active && styles.activeWindowItem]} 
-                onPress={() => runTmuxCommand(`select-window -t ${w.id}`)}
-              >
-                <Text style={[styles.windowText, w.active && styles.activeWindowText]}>{w.id}: {w.name}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
+      {/* ── Info Bar ── */}
       {ws && (
         <View style={styles.infoBar}>
-          <Text style={styles.infoText}><Text style={styles.infoLabel}>host: </Text>{serverIp}</Text>
-          <Text style={styles.infoText}><Text style={styles.infoLabel}>session: </Text>{sessionName}</Text>
-          <Text style={styles.infoText}><Text style={styles.infoLabel}>window: </Text>{activeWindowLabel}</Text>
+          <Text style={styles.infoText}>
+            {`${serverIp || 'openclaw:4000'}  ✦  session: ${sessionName || 'dev'}  ✦  window: ${activeWindowLabel}  ✦  UTF-8  ✦  SSH_AUTH`}
+          </Text>
         </View>
       )}
 
+      {/* ── Special Keys Toolbar ── */}
       <View
-        style={[styles.toolbarContainer, { paddingBottom: Math.max(insets.bottom, 8) }]}
+        style={[styles.toolbar, { paddingBottom: Math.max(insets.bottom, 8) }]}
         onLayout={(e) => {
           const h = e.nativeEvent.layout.height;
           toolbarHeightRef.current = h;
           setToolbarHeight(h);
         }}
       >
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.toolbarContent}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.toolbarContent}
+        >
           {specialKeys.map((k, i) => (
             <TouchableOpacity key={i} style={styles.keyButton} onPress={() => sendKey(k.value)}>
               <Text style={styles.keyText}>{k.label}</Text>
@@ -187,20 +280,36 @@ export default function TerminalScreen({ navigation }) {
         </ScrollView>
       </View>
 
-      {/* Action FAB Menu (Phase 3.3) */}
+      {/* ── Action FAB ── */}
       <Portal>
         <FAB.Group
           open={fabOpen}
           visible={isFocused}
           icon={fabOpen ? 'close' : 'console'}
           actions={[
-            { icon: 'view-split-vertical', label: 'Split H', onPress: () => runTmuxCommand('split-window -h') },
-            { icon: 'view-split-horizontal', label: 'Split V', onPress: () => runTmuxCommand('split-window -v') },
-            { icon: 'arrow-expand-all', label: 'Zoom', onPress: () => runTmuxCommand('resize-pane -Z') },
-            { icon: 'trash-can-outline', label: 'Kill Pane', onPress: () => runTmuxCommand('kill-pane') },
+            {
+              icon: 'view-split-vertical',
+              label: 'Split H',
+              onPress: () => runTmuxCommand('split-window -h'),
+            },
+            {
+              icon: 'view-split-horizontal',
+              label: 'Split V',
+              onPress: () => runTmuxCommand('split-window -v'),
+            },
+            {
+              icon: 'arrow-expand-all',
+              label: 'Zoom',
+              onPress: () => runTmuxCommand('resize-pane -Z'),
+            },
+            {
+              icon: 'trash-can-outline',
+              label: 'Kill Pane',
+              onPress: () => runTmuxCommand('kill-pane'),
+            },
           ]}
           onStateChange={({ open }) => setFabOpen(open)}
-          fabStyle={{ backgroundColor: '#0f0' }}
+          fabStyle={{ backgroundColor: C.primary }}
           style={{ bottom: toolbarHeight + insets.bottom + keyboardHeight }}
         />
       </Portal>
@@ -209,30 +318,148 @@ export default function TerminalScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  header: { 
-    height: 60, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    backgroundColor: '#1e1e1e',
-    borderBottomWidth: 1,
-    borderBottomColor: '#333'
+  container: {
+    flex: 1,
+    backgroundColor: C.black,
   },
-  statusText: { color: '#0f0', fontSize: 12, fontWeight: 'bold' },
-  terminalContainer: { flex: 1 },
-  webview: { flex: 1 },
-  windowFooter: { backgroundColor: '#1e1e1e', borderTopWidth: 1, borderTopColor: '#333' },
-  windowContent: { padding: 4, flexDirection: 'row' },
-  windowItem: { paddingVertical: 4, paddingHorizontal: 12, marginRight: 8, borderRadius: 12, backgroundColor: '#2a2a2a' },
-  activeWindowItem: { backgroundColor: '#0f0' },
-  windowText: { color: '#ccc', fontSize: 11, fontWeight: 'bold' },
-  activeWindowText: { color: '#000' },
-  infoBar: { height: 24, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', backgroundColor: '#111' },
-  infoText: { color: '#555', fontSize: 10, fontFamily: 'monospace' },
-  infoLabel: { color: '#333' },
-  toolbarContainer: { backgroundColor: '#1e1e1e', borderTopWidth: 1, borderTopColor: '#333' },
-  toolbarContent: { padding: 8, flexDirection: 'row' },
-  keyButton: { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#333', borderRadius: 4, marginRight: 8, minWidth: 40, alignItems: 'center' },
-  keyText: { color: '#0f0', fontSize: 12, fontWeight: 'bold' }
+
+  // ── Header ──
+  header: {
+    height: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    backgroundColor: C.bg,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerIcon: {
+    marginRight: 8,
+  },
+  headerTitle: {
+    color: C.primary,
+    fontSize: 13,
+    fontWeight: 'bold',
+    letterSpacing: 1,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerIconBtn: {
+    padding: 6,
+    marginLeft: 4,
+  },
+
+  // ── Window Tabs ──
+  tabsBar: {
+    height: 44,
+    backgroundColor: C.black,
+  },
+  tabsContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  tab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.surface,
+    borderRadius: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 2,
+    height: 32,
+    alignSelf: 'center',
+  },
+  tabActive: {
+    backgroundColor: C.primary,
+  },
+  tabText: {
+    color: C.muted,
+    fontSize: 11,
+    fontWeight: 'bold',
+  },
+  tabTextActive: {
+    color: C.onPrimary,
+  },
+  tabClose: {
+    marginLeft: 6,
+  },
+  tabCloseText: {
+    color: C.muted,
+    fontSize: 13,
+    fontWeight: 'bold',
+    lineHeight: 14,
+  },
+  tabCloseTextActive: {
+    color: C.onPrimary,
+  },
+  tabNew: {
+    backgroundColor: C.surface,
+    borderRadius: 2,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 2,
+    alignSelf: 'center',
+  },
+  tabNewText: {
+    color: C.muted,
+    fontSize: 16,
+    fontWeight: 'bold',
+    lineHeight: 18,
+  },
+
+  // ── Terminal ──
+  terminalContainer: {
+    flex: 1,
+  },
+  webview: {
+    flex: 1,
+  },
+
+  // ── Info Bar ──
+  infoBar: {
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: C.black,
+  },
+  infoText: {
+    color: C.mutedDark,
+    fontSize: 10,
+    fontFamily: 'monospace',
+  },
+
+  // ── Toolbar ──
+  toolbar: {
+    backgroundColor: C.bg,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(72,72,71,0.3)',
+  },
+  toolbarContent: {
+    flexDirection: 'row',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  keyButton: {
+    backgroundColor: C.surface,
+    borderRadius: 2,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginRight: 6,
+    minWidth: 40,
+    alignItems: 'center',
+  },
+  keyText: {
+    color: C.primary,
+    fontSize: 11,
+    fontWeight: 'bold',
+    fontFamily: 'monospace',
+  },
 });
