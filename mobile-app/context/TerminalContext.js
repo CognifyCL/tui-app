@@ -173,6 +173,7 @@ export const TerminalProvider = ({ children }) => {
         setSessionName(session);
         saveHost(ip);
         log(`WebSocket Connected to ${wsUrl}`, 'success');
+        if (__DEV__) console.info(`[TUI][INFO]  WS connected to ${ip}`);
       };
 
       socket.onmessage = (event) => {
@@ -180,6 +181,7 @@ export const TerminalProvider = ({ children }) => {
           const msg = JSON.parse(event.data);
           if (msg.type === 'tmux-windows') {
             setWindows(msg.data);
+            if (__DEV__) console.debug(`[TUI][DEBUG] windows update → ${msg.data?.length ?? 0} windows`);
             return;
           }
         } catch (e) {
@@ -191,11 +193,13 @@ export const TerminalProvider = ({ children }) => {
       socket.onerror = (e) => {
         setStatus(`Error: Check Host/Port`);
         log(`WebSocket Error: Check if server is running on ${wsUrl}`, 'error');
+        if (__DEV__) console.error(`[TUI][ERROR] WS error`);
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         setWs(null);
         setWindows([]);
+        if (__DEV__) console.warn(`[TUI][WARN]  WS closed (code: ${event.code}, clean: ${event.wasClean})`);
 
         if (manualDisconnectRef.current) {
           setStatus('Disconnected');
@@ -217,6 +221,7 @@ export const TerminalProvider = ({ children }) => {
         );
         setStatus(`Reconnecting (${attempt}/${RECONNECT_MAX_ATTEMPTS})...`);
         log(`WebSocket closed — reconnecting in ${delay / 1000}s (attempt ${attempt}/${RECONNECT_MAX_ATTEMPTS})`, 'info');
+        if (__DEV__) console.info(`[TUI][INFO]  Reconnecting attempt ${attempt}/10 in ${delay}ms`);
 
         reconnectTimeoutRef.current = setTimeout(() => {
           reconnectTimeoutRef.current = null;
@@ -277,6 +282,7 @@ export const TerminalProvider = ({ children }) => {
   const runTmuxCommand = (cmd) => {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'tmux-cmd', cmd }));
+      if (__DEV__) console.debug(`[TUI][DEBUG] tmux-cmd → ${cmd}`);
     }
   };
 
