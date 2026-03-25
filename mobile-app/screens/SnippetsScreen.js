@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ScrollView } from 'react-native';
 import {
   Text, List, FAB, Card, IconButton,
-  Modal, Portal, TextInput, Button, Dialog
+  Modal, Portal, TextInput, Button, Dialog, useTheme
 } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +19,7 @@ const DEFAULT_SNIPPETS = [
 
 export default function SnippetsScreen() {
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const { sendInput } = useTerminal();
 
   const [snippets, setSnippets] = useState([]);
@@ -69,12 +70,12 @@ export default function SnippetsScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Portal>
         <Modal
           visible={modalVisible}
           onDismiss={() => setModalVisible(false)}
-          contentContainerStyle={styles.modal}
+          contentContainerStyle={[styles.modal, { backgroundColor: theme.colors.surface }]}
         >
           <Text variant="titleMedium" style={styles.modalTitle}>Add Snippet</Text>
           <TextInput
@@ -120,7 +121,7 @@ export default function SnippetsScreen() {
 
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 80 }}>
         {snippets.length === 0 ? (
-          <Text style={styles.emptyText}>No snippets yet.</Text>
+          <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>No snippets yet.</Text>
         ) : (
           snippets.map((snippet) => (
             <Card key={snippet.id} style={styles.card}>
@@ -159,12 +160,12 @@ export default function SnippetsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1 },
   card: { marginBottom: 12 },
   actions: { flexDirection: 'row' },
-  emptyText: { textAlign: 'center', marginTop: 40, color: '#666', fontStyle: 'italic' },
+  emptyText: { textAlign: 'center', marginTop: 40, fontStyle: 'italic' },
   fab: { position: 'absolute', right: 16 },
-  modal: { backgroundColor: 'white', margin: 20, padding: 20, borderRadius: 8 },
+  modal: { margin: 20, padding: 20, borderRadius: 8 },
   modalTitle: { marginBottom: 12 },
   input: { marginBottom: 12 },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 4 },

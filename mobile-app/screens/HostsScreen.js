@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, View, ScrollView } from 'react-native';
 import {
   Text, List, IconButton, FAB, Card,
-  Modal, Portal, TextInput, Button, Dialog
+  Modal, Portal, TextInput, Button, Dialog, useTheme
 } from 'react-native-paper';
 import { useTerminal } from '../hooks/useTerminal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +11,7 @@ const EMPTY_FORM = { name: '', ip: '' };
 
 export default function HostsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const { recentHosts, setServerIp, addHost, editHost, deleteHost } = useTerminal();
 
   const [modalVisible, setModalVisible] = useState(false);
@@ -56,12 +57,12 @@ export default function HostsScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <Portal>
         <Modal
           visible={modalVisible}
           onDismiss={() => setModalVisible(false)}
-          contentContainerStyle={styles.modal}
+          contentContainerStyle={[styles.modal, { backgroundColor: theme.colors.surface }]}
         >
           <Text variant="titleMedium" style={styles.modalTitle}>
             {editingIp ? 'Edit Host' : 'Add Host'}
@@ -120,7 +121,7 @@ export default function HostsScreen({ navigation }) {
             </Card>
           ))
         ) : (
-          <Text style={styles.emptyText}>No saved hosts yet.</Text>
+          <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>No saved hosts yet.</Text>
         )}
       </ScrollView>
 
@@ -134,12 +135,12 @@ export default function HostsScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1 },
   card: { marginBottom: 12 },
   actions: { flexDirection: 'row' },
-  emptyText: { textAlign: 'center', marginTop: 40, color: '#666', fontStyle: 'italic' },
+  emptyText: { textAlign: 'center', marginTop: 40, fontStyle: 'italic' },
   fab: { position: 'absolute', right: 16 },
-  modal: { backgroundColor: 'white', margin: 20, padding: 20, borderRadius: 8 },
+  modal: { margin: 20, padding: 20, borderRadius: 8 },
   modalTitle: { marginBottom: 12 },
   input: { marginBottom: 12 },
   modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 4 },

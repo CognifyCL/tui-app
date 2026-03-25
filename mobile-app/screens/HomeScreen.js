@@ -120,7 +120,7 @@ export default function HomeScreen({ navigation }) {
                     Haptics.selectionAsync();
                   }}
                   left={props => <List.Icon {...props} icon="terminal" />}
-                  right={props => sessionName === s ? <List.Icon {...props} icon="check" color="#0f0" /> : null}
+                  right={props => sessionName === s ? <List.Icon {...props} icon="check" color={theme.colors.primary} /> : null}
                 />
               ))
             ) : (
