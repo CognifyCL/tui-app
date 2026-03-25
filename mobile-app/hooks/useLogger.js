@@ -7,7 +7,7 @@ const CONSOLE_METHOD = {
   DEBUG: 'debug',
   INFO:  'info',
   WARN:  'warn',
-  ERROR: 'error',
+  ERROR: 'warn',
 };
 
 // Level tags padded to the same width as ERROR (5 chars)

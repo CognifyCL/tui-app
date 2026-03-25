@@ -193,7 +193,7 @@ export const TerminalProvider = ({ children }) => {
       socket.onerror = (e) => {
         setStatus(`Error: Check Host/Port`);
         log(`WebSocket Error: Check if server is running on ${wsUrl}`, 'error');
-        if (__DEV__) console.error(`[TUI][ERROR] WS error`);
+        if (__DEV__) console.warn(`[TUI][ERROR] WS error`);
       };
 
       socket.onclose = (event) => {
