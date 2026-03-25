@@ -31,7 +31,6 @@ export default function HomeScreen({ navigation }) {
   const [dialogVisible, setDialogVisible] = useState(false);
   const [newSessionName, setNewSessionName] = useState('default');
 
-  // Derive currently-connected session name from status string ("Connected: <name>")
   const connectedSession = status.startsWith('Connected: ')
     ? status.slice('Connected: '.length)
     : null;
@@ -94,9 +93,9 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate('Terminal');
   };
 
-  const handleConnectSession = (sessionName) => {
+  const handleConnectSession = (name) => {
     Haptics.selectionAsync();
-    connect(serverIp, sessionName);
+    connect(serverIp, name);
     navigation.navigate('Terminal');
   };
 
@@ -144,22 +143,32 @@ export default function HomeScreen({ navigation }) {
           </View>
         ) : (
           sessions.map((s, idx) => {
-            const isActive = s === connectedSession;
+            const isActive = s.name === connectedSession;
+            const descParts = [];
+            if (s.attached) descParts.push('attached');
+            descParts.push(`${s.windows} window${s.windows !== 1 ? 's' : ''}`);
+            if (s.created) descParts.push(s.created);
+            const description = descParts.join(' · ');
             return (
               <List.Item
                 key={idx}
-                title={s}
+                title={s.name}
+                description={description}
                 titleStyle={[styles.sessionTitle, isActive && styles.sessionTitleActive]}
                 style={[
                   styles.sessionItem,
                   isActive && { backgroundColor: theme.colors.primaryContainer },
                 ]}
-                onPress={() => handleConnectSession(s)}
+                onPress={() => handleConnectSession(s.name)}
                 left={(props) => (
                   <List.Icon {...props} icon="terminal" />
                 )}
                 right={(props) => (
-                  <List.Icon {...props} icon="chevron-right" />
+                  <List.Icon
+                    {...props}
+                    icon={s.attached ? 'circle' : 'chevron-right'}
+                    color={s.attached ? theme.colors.primary : undefined}
+                  />
                 )}
               />
             );

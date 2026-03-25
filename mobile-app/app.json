@@ -7,7 +7,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -22,10 +21,16 @@
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#1e1e1e"
       },
-      "package": "cl.cognify.tuimobile"
+      "package": "cl.cognify.tuimobile",
+      "usesCleartextTraffic": true
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "25c220a0-3e29-4021-bbeb-3cbd0cfc7108"
+      }
     }
   }
 }

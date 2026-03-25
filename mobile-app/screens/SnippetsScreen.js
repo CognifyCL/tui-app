@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ScrollView } from 'react-native';
 import {
   Text, List, FAB, Card, IconButton,
-  Modal, Portal, TextInput, Button, Dialog, useTheme
+  Modal, Portal, TextInput, Button, Dialog, useTheme, Snackbar
 } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +26,9 @@ export default function SnippetsScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editingSnippet, setEditingSnippet] = useState(null);
+  const [snackVisible, setSnackVisible] = useState(false);
+  const [snackMessage, setSnackMessage] = useState('');
 
   useEffect(() => {
     loadSnippets();
@@ -52,14 +55,30 @@ export default function SnippetsScreen() {
 
   const handleSave = async () => {
     if (!form.label.trim() || !form.command.trim()) return;
-    const newSnippet = {
-      id: Date.now().toString(),
-      label: form.label.trim(),
-      command: form.command.trim(),
-    };
-    await persist([...snippets, newSnippet]);
+    if (editingSnippet) {
+      const updated = snippets.map(s =>
+        s.id === editingSnippet.id
+          ? { ...s, label: form.label.trim(), command: form.command.trim() }
+          : s
+      );
+      await persist(updated);
+    } else {
+      const newSnippet = {
+        id: Date.now().toString(),
+        label: form.label.trim(),
+        command: form.command.trim(),
+      };
+      await persist([...snippets, newSnippet]);
+    }
     setModalVisible(false);
     setForm(EMPTY_FORM);
+    setEditingSnippet(null);
+  };
+
+  const handleEdit = (snippet) => {
+    setEditingSnippet(snippet);
+    setForm({ label: snippet.label, command: snippet.command });
+    setModalVisible(true);
   };
 
   const handleConfirmDelete = async () => {
@@ -74,10 +93,10 @@ export default function SnippetsScreen() {
       <Portal>
         <Modal
           visible={modalVisible}
-          onDismiss={() => setModalVisible(false)}
+          onDismiss={() => { setModalVisible(false); setEditingSnippet(null); setForm(EMPTY_FORM); }}
           contentContainerStyle={[styles.modal, { backgroundColor: theme.colors.surface }]}
         >
-          <Text variant="titleMedium" style={styles.modalTitle}>Add Snippet</Text>
+          <Text variant="titleMedium" style={styles.modalTitle}>{editingSnippet ? 'Edit Snippet' : 'Add Snippet'}</Text>
           <TextInput
             label="Name"
             value={form.label}
@@ -96,7 +115,7 @@ export default function SnippetsScreen() {
             multiline
           />
           <View style={styles.modalActions}>
-            <Button onPress={() => setModalVisible(false)}>Cancel</Button>
+            <Button onPress={() => { setModalVisible(false); setEditingSnippet(null); setForm(EMPTY_FORM); }}>Cancel</Button>
             <Button
               mode="contained"
               onPress={handleSave}
@@ -133,7 +152,15 @@ export default function SnippetsScreen() {
                   <View style={styles.actions}>
                     <IconButton
                       icon="play-circle"
-                      onPress={() => sendInput(snippet.command + '\n')}
+                      onPress={() => {
+                        setSnackMessage(`Running: ${snippet.label}`);
+                        setSnackVisible(true);
+                        sendInput(snippet.command + '\n');
+                      }}
+                    />
+                    <IconButton
+                      icon="pencil"
+                      onPress={() => handleEdit(snippet)}
                     />
                     <IconButton
                       icon="delete"
@@ -151,10 +178,18 @@ export default function SnippetsScreen() {
         icon="plus"
         style={[styles.fab, { bottom: insets.bottom + 16 }]}
         onPress={() => {
+          setEditingSnippet(null);
           setForm(EMPTY_FORM);
           setModalVisible(true);
         }}
       />
+      <Snackbar
+        visible={snackVisible}
+        onDismiss={() => setSnackVisible(false)}
+        duration={1500}
+      >
+        {snackMessage}
+      </Snackbar>
     </View>
   );
 }

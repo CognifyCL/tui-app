@@ -6,6 +6,7 @@ export const ThemeContext = createContext();
 const STORAGE_KEYS = {
   DARK_MODE: '@cognifycl/dark_mode',
   LOG_LEVEL: '@cognifycl/log_level',
+  FONT_SIZE: '@cognifycl/font_size',
 };
 
 export const LOG_LEVELS = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
@@ -20,14 +21,16 @@ const LOG_LEVEL_PRIORITY = {
 export const ThemeProvider = ({ children }) => {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [logLevel, setLogLevelState] = useState('DEBUG');
+  const [fontSize, setFontSizeState] = useState(12);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
     const loadSettings = async () => {
       try {
-        const [darkModeValue, logLevelValue] = await Promise.all([
+        const [darkModeValue, logLevelValue, fontSizeValue] = await Promise.all([
           AsyncStorage.getItem(STORAGE_KEYS.DARK_MODE),
           AsyncStorage.getItem(STORAGE_KEYS.LOG_LEVEL),
+          AsyncStorage.getItem(STORAGE_KEYS.FONT_SIZE),
         ]);
 
         if (darkModeValue !== null) {
@@ -35,6 +38,10 @@ export const ThemeProvider = ({ children }) => {
         }
         if (logLevelValue !== null && LOG_LEVELS.includes(logLevelValue)) {
           setLogLevelState(logLevelValue);
+        }
+        if (fontSizeValue !== null) {
+          const parsed = parseInt(fontSizeValue, 10);
+          if (!isNaN(parsed)) setFontSizeState(parsed);
         }
       } catch (e) {
         // Silently fall back to defaults
@@ -66,6 +73,15 @@ export const ThemeProvider = ({ children }) => {
     }
   }, []);
 
+  const setFontSize = useCallback(async (size) => {
+    setFontSizeState(size);
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.FONT_SIZE, String(size));
+    } catch (e) {
+      // ignore persist error
+    }
+  }, []);
+
   const isLogAllowed = useCallback((type) => {
     // Map useLogger types to LOG_LEVEL_PRIORITY keys
     const typeMap = {
@@ -88,6 +104,8 @@ export const ThemeProvider = ({ children }) => {
         logLevel,
         setLogLevel,
         isLogAllowed,
+        fontSize,
+        setFontSize,
         isLoaded,
         themeStorageKeys: STORAGE_KEYS,
       }}

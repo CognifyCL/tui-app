@@ -140,11 +140,11 @@ export const TerminalProvider = ({ children }) => {
 
     await AsyncStorage.multiRemove(allKeys);
 
-    // Reset in-memory state
     setRecentHosts([]);
     setServerIp('');
     setSessionName('default');
     clearLogs();
+    disconnect();
   };
 
   useEffect(() => {

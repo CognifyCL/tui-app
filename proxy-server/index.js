@@ -27,15 +27,40 @@ const server = http.createServer((req, res) => {
       return;
     }
 
-    // Run tmux ls to get session names
-    exec("tmux ls -F '#S'", (error, stdout, stderr) => {
-      let sessions = [];
-      if (!error && stdout) {
-        sessions = stdout.trim().split('\n').filter(s => s.trim().length > 0);
+    exec("tmux ls -F '#S\t#{session_created}\t#{session_attached}'", (error, stdout) => {
+      if (error || !stdout || !stdout.trim()) {
+        res.writeHead(200);
+        res.end(JSON.stringify([]));
+        return;
       }
-      
-      res.writeHead(200);
-      res.end(JSON.stringify(sessions));
+
+      const lines = stdout.trim().split('\n').filter(l => l.trim().length > 0);
+      const now = Math.floor(Date.now() / 1000);
+
+      const metaPromises = lines.map(line => {
+        const [name, createdStr, attachedStr] = line.split('\t');
+        const attached = parseInt(attachedStr, 10) > 0;
+        const createdTs = parseInt(createdStr, 10);
+        const ageSecs = now - createdTs;
+        let created = '';
+        if (!isNaN(ageSecs) && ageSecs >= 0) {
+          if (ageSecs < 3600) created = `${Math.floor(ageSecs / 60)}m ago`;
+          else if (ageSecs < 86400) created = `${Math.floor(ageSecs / 3600)}h ago`;
+          else created = `${Math.floor(ageSecs / 86400)}d ago`;
+        }
+
+        return new Promise(resolve => {
+          exec(`tmux list-windows -t ${name} | wc -l`, (err, out) => {
+            const windows = err ? 1 : (parseInt(out.trim(), 10) || 1);
+            resolve({ name, windows, created, attached });
+          });
+        });
+      });
+
+      Promise.all(metaPromises).then(sessions => {
+        res.writeHead(200);
+        res.end(JSON.stringify(sessions));
+      });
     });
   } else {
     res.writeHead(404);
@@ -113,7 +138,7 @@ wss.on('connection', (ws, req) => {
         broadcastWindows();
       } else if (data.type === 'tmux-cmd') {
         // Structured tmux command (Phase 1.1)
-        const allowedCommands = ['select-window', 'split-window', 'resize-pane', 'zoom-pane', 'kill-pane'];
+        const allowedCommands = ['select-window', 'split-window', 'resize-pane', 'zoom-pane', 'kill-pane', 'new-window'];
         const cmdParts = data.cmd.split(' ');
         const subCommand = cmdParts[0];
 

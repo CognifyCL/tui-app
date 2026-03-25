@@ -1,16 +1,19 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { StyleSheet, View, ScrollView, TouchableOpacity, Keyboard } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { Text, IconButton, FAB, Portal } from 'react-native-paper';
+import { Text, IconButton, FAB, Portal, Menu } from 'react-native-paper';
 import { useTerminal } from '../hooks/useTerminal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
+import { useThemeContext } from '../context/ThemeContext';
 
 export default function TerminalScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const webViewRef = useRef(null);
-  const { ws, status, addListener, sendInput, sendResize, windows, runTmuxCommand, serverIp, sessionName } = useTerminal();
+  const { ws, status, addListener, sendInput, sendResize, windows, runTmuxCommand, disconnect, serverIp, sessionName } = useTerminal();
+  const { isDarkMode, fontSize } = useThemeContext();
   const [fabOpen, setFabOpen] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
   const [toolbarHeight, setToolbarHeight] = useState(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const toolbarHeightRef = useRef(0);
@@ -34,6 +37,26 @@ export default function TerminalScreen({ navigation }) {
       hideSub.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(`window.setTerminalTheme(${isDarkMode}); true;`);
+    }
+  }, [isDarkMode]);
+
+  useEffect(() => {
+    if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(`window.setFontSize(${fontSize}); true;`);
+    }
+  }, [fontSize]);
+
+  const handleWebViewLoad = () => {
+    if (webViewRef.current) {
+      webViewRef.current.injectJavaScript(
+        `window.setTerminalTheme(${isDarkMode}); window.setFontSize(${fontSize}); true;`
+      );
+    }
+  };
 
   const handleWebViewMessage = (event) => {
     try {
@@ -68,7 +91,40 @@ export default function TerminalScreen({ navigation }) {
       <View style={[styles.header, { paddingTop: Math.max(insets.top, 8) }]}>
         <IconButton icon="menu" onPress={() => navigation.openDrawer()} />
         <Text style={styles.statusText}>{status}</Text>
-        <IconButton icon="dots-vertical" onPress={() => {}} />
+        <Menu
+          visible={menuVisible}
+          onDismiss={() => setMenuVisible(false)}
+          anchor={
+            <IconButton icon="dots-vertical" onPress={() => setMenuVisible(true)} />
+          }
+        >
+          <Menu.Item
+            leadingIcon="power-plug-off"
+            onPress={() => { setMenuVisible(false); disconnect(); }}
+            title="Disconnect"
+          />
+          <Menu.Item
+            leadingIcon="content-copy"
+            onPress={() => {
+              setMenuVisible(false);
+              webViewRef.current?.injectJavaScript('window.copyLastOutput && window.copyLastOutput(); true;');
+            }}
+            title="Copy last output"
+          />
+          <Menu.Item
+            leadingIcon="delete-sweep"
+            onPress={() => {
+              setMenuVisible(false);
+              webViewRef.current?.injectJavaScript('term.clear(); true;');
+            }}
+            title="Clear terminal"
+          />
+          <Menu.Item
+            leadingIcon="plus-box-outline"
+            onPress={() => { setMenuVisible(false); runTmuxCommand('new-window'); }}
+            title="New window"
+          />
+        </Menu>
       </View>
       
       <View style={styles.terminalContainer}>
@@ -77,6 +133,7 @@ export default function TerminalScreen({ navigation }) {
           source={require('../assets/terminal.html')}
           originWhitelist={['*']}
           onMessage={handleWebViewMessage}
+          onLoad={handleWebViewLoad}
           style={styles.webview}
           backgroundColor="#000"
           keyboardDisplayRequiresUserAction={false}

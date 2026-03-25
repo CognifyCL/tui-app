@@ -1,5 +1,5 @@
 import React, { useState, useContext } from 'react';
-import { StyleSheet, View, ScrollView } from 'react-native';
+import { StyleSheet, View, ScrollView, TouchableOpacity } from 'react-native';
 import {
   List,
   Switch,
@@ -12,6 +12,7 @@ import {
   useTheme,
 } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { ThemeContext, LOG_LEVELS } from '../context/ThemeContext';
 import { TerminalContext } from '../context/TerminalContext';
 
@@ -22,21 +23,23 @@ const LOG_LEVEL_DESCRIPTIONS = {
   ERROR: 'Errors only',
 };
 
+const FONT_SIZE_OPTIONS = [10, 12, 14, 16, 18];
+
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
+  const navigation = useNavigation();
 
-  const { isDarkMode, toggleDarkMode, logLevel, setLogLevel } = useContext(ThemeContext);
+  const { isDarkMode, toggleDarkMode, logLevel, setLogLevel, fontSize, setFontSize } = useContext(ThemeContext);
   const { clearAllStorage } = useContext(TerminalContext);
 
-  // Log level picker dialog
   const [logLevelDialogVisible, setLogLevelDialogVisible] = useState(false);
   const [pendingLogLevel, setPendingLogLevel] = useState(logLevel);
 
-  // Clear cache confirmation dialog
+  const [fontSizeDialogVisible, setFontSizeDialogVisible] = useState(false);
+
   const [clearCacheDialogVisible, setClearCacheDialogVisible] = useState(false);
 
-  // Reset confirmation dialog
   const [resetDialogVisible, setResetDialogVisible] = useState(false);
 
   // ----------------------------------------------------------------
@@ -61,12 +64,7 @@ export default function SettingsScreen() {
   const handleReset = async () => {
     setResetDialogVisible(false);
     await clearAllStorage();
-    // Reset theme preferences to defaults (dark mode on, log level DEBUG)
-    // ThemeContext will persist these on next toggle; here we just reload defaults
-    // by letting the app re-render from cleared AsyncStorage values.
-    // A more aggressive reset could use expo-updates: Updates.reloadAsync()
-    // but that requires the expo-updates package to be installed.
-    // Clearing state is sufficient for an in-session reset.
+    navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
   };
 
   // ----------------------------------------------------------------
@@ -97,6 +95,13 @@ export default function SettingsScreen() {
                 onValueChange={toggleDarkMode}
               />
             )}
+          />
+          <List.Item
+            title="Font Size"
+            description={`${fontSize}pt`}
+            left={props => <List.Icon {...props} icon="format-size" />}
+            right={props => <List.Icon {...props} icon="chevron-right" />}
+            onPress={() => setFontSizeDialogVisible(true)}
           />
         </List.Section>
 
@@ -143,6 +148,29 @@ export default function SettingsScreen() {
 
       {/* ── Portals (Dialogs) ─────────────────────────── */}
       <Portal>
+        {/* Font Size Picker */}
+        <Dialog visible={fontSizeDialogVisible} onDismiss={() => setFontSizeDialogVisible(false)}>
+          <Dialog.Title>Font Size</Dialog.Title>
+          <Dialog.Content>
+            <View style={styles.fontSizeRow}>
+              {FONT_SIZE_OPTIONS.map(size => (
+                <TouchableOpacity
+                  key={size}
+                  style={[styles.fontSizeButton, fontSize === size && styles.fontSizeButtonActive]}
+                  onPress={() => { setFontSize(size); setFontSizeDialogVisible(false); }}
+                >
+                  <Text style={[styles.fontSizeButtonText, fontSize === size && styles.fontSizeButtonTextActive]}>
+                    {size}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setFontSizeDialogVisible(false)}>Cancel</Button>
+          </Dialog.Actions>
+        </Dialog>
+
         {/* Log Level Picker */}
         <Dialog visible={logLevelDialogVisible} onDismiss={() => setLogLevelDialogVisible(false)}>
           <Dialog.Title>Log Level</Dialog.Title>
@@ -186,8 +214,7 @@ export default function SettingsScreen() {
           <Dialog.Title>Reset All Settings?</Dialog.Title>
           <Dialog.Content>
             <Text variant="bodyMedium">
-              This will clear all saved hosts, settings, and cached data, and restore the app to its
-              default state. This cannot be undone.
+              This will clear all saved data and disconnect your active session.
             </Text>
           </Dialog.Content>
           <Dialog.Actions>
@@ -207,5 +234,30 @@ const styles = StyleSheet.create({
   footer: {
     padding: 16,
     marginTop: 8,
+  },
+  fontSizeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  fontSizeButton: {
+    flex: 1,
+    marginHorizontal: 4,
+    paddingVertical: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    alignItems: 'center',
+  },
+  fontSizeButtonActive: {
+    borderColor: '#6200ee',
+    backgroundColor: '#6200ee',
+  },
+  fontSizeButtonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  fontSizeButtonTextActive: {
+    color: '#fff',
   },
 });
