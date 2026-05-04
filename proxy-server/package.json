@@ -1,9 +1,11 @@
 {
-  "name": "@cognifycl/tui-app-proxy",
+  "name": "@cognifycl/kinetic-console",
   "version": "1.0.0",
-  "description": "TUI Proxy Server for tui-app",
+  "description": "Kinetic Console Proxy Server",
   "main": "index.js",
-  "bin": "index.js",
+  "bin": {
+    "kinetic-console": "index.js"
+  },
   "scripts": {
     "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -13,7 +15,9 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "localtunnel": "^2.0.2",
     "node-pty": "^1.1.0",
+    "qrcode-terminal": "^0.12.0",
     "ws": "^8.20.0"
   }
 }

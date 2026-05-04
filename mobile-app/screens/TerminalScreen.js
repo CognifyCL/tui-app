@@ -7,18 +7,8 @@ import { useTerminal } from '../hooks/useTerminal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useIsFocused } from '@react-navigation/native';
 import { useThemeContext } from '../context/ThemeContext';
-
-const C = {
-  bg: '#0e0e0e',
-  black: '#000000',
-  surface: '#1a1a1a',
-  surfaceHigh: '#20201f',
-  primary: '#52fd2e',
-  onPrimary: '#000000',
-  muted: '#adaaaa',
-  mutedDark: '#333333',
-  outline: '#484847',
-};
+import { C, MONO } from '../theme/theme.js';
+import terminalHtml from '../assets/terminal.html';
 
 export default function TerminalScreen({ navigation }) {
   const insets = useSafeAreaInsets();
@@ -129,7 +119,7 @@ export default function TerminalScreen({ navigation }) {
   const hasWindows = windows && windows.length > 0;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: keyboardHeight }]}>
       {/* ── App Header ── */}
       <View style={styles.header}>
         {/* Left: icon + title */}
@@ -209,7 +199,7 @@ export default function TerminalScreen({ navigation }) {
                 </Text>
                 <TouchableOpacity
                   onPress={() => {
-                    if (windows.length > 1) runTmuxCommand('kill-pane');
+                    if (windows.length > 1) runTmuxCommand(`kill-window -t ${w.id}`);
                   }}
                   style={styles.tabClose}
                   hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
@@ -234,12 +224,12 @@ export default function TerminalScreen({ navigation }) {
       <View style={styles.terminalContainer}>
         <WebView
           ref={webViewRef}
-          source={require('../assets/terminal.html')}
+          source={terminalHtml}
           originWhitelist={['*']}
           onMessage={handleWebViewMessage}
           onLoad={handleWebViewLoad}
           style={styles.webview}
-          backgroundColor={C.black}
+          backgroundColor={C.bg}
           keyboardDisplayRequiresUserAction={false}
           automaticallyAdjustContentInsets={false}
           domStorageEnabled={true}
@@ -249,18 +239,9 @@ export default function TerminalScreen({ navigation }) {
         />
       </View>
 
-      {/* ── Info Bar ── */}
-      {ws && (
-        <View style={styles.infoBar}>
-          <Text style={styles.infoText}>
-            {`${serverIp || 'openclaw:4000'}  ✦  session: ${sessionName || 'dev'}  ✦  window: ${activeWindowLabel}  ✦  UTF-8  ✦  SSH_AUTH`}
-          </Text>
-        </View>
-      )}
-
       {/* ── Special Keys Toolbar ── */}
       <View
-        style={[styles.toolbar, { paddingBottom: Math.max(insets.bottom, 8) }]}
+        style={[styles.toolbar, { paddingBottom: keyboardHeight > 0 ? 8 : Math.max(insets.bottom, 8) }]}
         onLayout={(e) => {
           const h = e.nativeEvent.layout.height;
           toolbarHeightRef.current = h;
@@ -288,14 +269,9 @@ export default function TerminalScreen({ navigation }) {
           icon={fabOpen ? 'close' : 'console'}
           actions={[
             {
-              icon: 'view-split-vertical',
-              label: 'Split H',
-              onPress: () => runTmuxCommand('split-window -h'),
-            },
-            {
-              icon: 'view-split-horizontal',
-              label: 'Split V',
-              onPress: () => runTmuxCommand('split-window -v'),
+              icon: 'plus-box-outline',
+              label: 'New Window',
+              onPress: () => runTmuxCommand('new-window'),
             },
             {
               icon: 'arrow-expand-all',
@@ -304,13 +280,18 @@ export default function TerminalScreen({ navigation }) {
             },
             {
               icon: 'trash-can-outline',
-              label: 'Kill Pane',
-              onPress: () => runTmuxCommand('kill-pane'),
+              label: 'Kill Window',
+              onPress: () => {
+                if (windows && windows.length > 1) {
+                  const active = windows.find(w => w.active);
+                  if (active) runTmuxCommand(`kill-window -t ${active.id}`);
+                }
+              },
             },
           ]}
           onStateChange={({ open }) => setFabOpen(open)}
           fabStyle={{ backgroundColor: C.primary }}
-          style={{ bottom: toolbarHeight + insets.bottom + keyboardHeight }}
+          style={{ bottom: toolbarHeight + (keyboardHeight > 0 ? 8 : insets.bottom) }}
         />
       </Portal>
     </View>
@@ -320,7 +301,7 @@ export default function TerminalScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: C.black,
+    backgroundColor: C.bg,
   },
 
   // ── Header ──
@@ -357,7 +338,7 @@ const styles = StyleSheet.create({
   // ── Window Tabs ──
   tabsBar: {
     height: 44,
-    backgroundColor: C.black,
+    backgroundColor: C.bg,
   },
   tabsContent: {
     flexDirection: 'row',
@@ -428,19 +409,19 @@ const styles = StyleSheet.create({
     height: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: C.black,
+    backgroundColor: C.bg,
   },
   infoText: {
-    color: C.mutedDark,
+    color: C.muted,
     fontSize: 10,
-    fontFamily: 'monospace',
+    fontFamily: MONO,
   },
 
   // ── Toolbar ──
   toolbar: {
     backgroundColor: C.bg,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(72,72,71,0.3)',
+    borderTopColor: C.outlineFaint,
   },
   toolbarContent: {
     flexDirection: 'row',
@@ -460,6 +441,6 @@ const styles = StyleSheet.create({
     color: C.primary,
     fontSize: 11,
     fontWeight: 'bold',
-    fontFamily: 'monospace',
+    fontFamily: MONO,
   },
 });

@@ -2,6 +2,7 @@
   "expo": {
     "name": "TUI Mobile",
     "slug": "tui-mobile-client",
+    "scheme": "kinetic",
     "version": "1.0.0",
     "owner": "cognifycl",
     "orientation": "portrait",

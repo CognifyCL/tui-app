@@ -1,147 +1,318 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
 import {
-  Text, List, IconButton, FAB, Card,
-  Modal, Portal, TextInput, Button, Dialog, useTheme
-} from 'react-native-paper';
-import { useTerminal } from '../hooks/useTerminal';
+  View,
+  ScrollView,
+  TouchableOpacity,
+  Text,
+  StyleSheet,
+  TextInput as RNTextInput,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Portal, Dialog, TextInput, Button } from 'react-native-paper';
 
-const EMPTY_FORM = { name: '', ip: '' };
+import { useTerminal } from '../hooks/useTerminal';
+import { C, MONO } from '../theme/theme';
+import { CONNECTION_STATUS } from '../config/constants';
+import { resolveHost } from '../utils/url';
+import SectionHeader from '../components/ui/SectionHeader';
+import HostCard from '../components/host/HostCard';
+import QRScanner from '../components/host/QRScanner';
 
 export default function HostsScreen({ navigation }) {
   const insets = useSafeAreaInsets();
-  const theme = useTheme();
-  const { recentHosts, setServerIp, addHost, editHost, deleteHost } = useTerminal();
+  const {
+    recentHosts,
+    addHost,
+    editHost,
+    deleteHost,
+    setServerIp,
+    serverIp,
+    status,
+    reconnectAttempt,
+  } = useTerminal();
 
-  const [modalVisible, setModalVisible] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [editingIp, setEditingIp] = useState(null);
+  const [showScanner, setShowScanner] = useState(false);
+  const [formName, setFormName] = useState('');
+  const [formIp, setFormIp] = useState('');
+  const [formToken, setFormToken] = useState('');
+  const [editingIp, setEditingIp] = useState(null); // null = add mode
 
-  const [deleteTarget, setDeleteTarget] = useState(null);
+  useEffect(() => {
+    if (recentHosts.length === 0) {
+      setShowScanner(true);
+    }
+  }, []);
+
+  const resetForm = () => {
+    setFormName('');
+    setFormIp('');
+    setFormToken('');
+    setEditingIp(null);
+  };
+
+  const handleSubmit = () => {
+    const trimmedInput = formIp.trim();
+    if (!trimmedInput) return;
+
+    // Use resolveHost to parse potential Magic Links
+    const { httpUrl, token, id } = resolveHost(trimmedInput);
+    const cleanIp = httpUrl.replace(/^https?:\/\//, '');
+    
+    const finalToken = token || formToken.trim();
+    const finalName = formName.trim() || id || 'Remote Proxy';
+
+    if (editingIp !== null) {
+      editHost(editingIp, { name: finalName, ip: cleanIp, token: finalToken });
+    } else {
+      addHost({ name: finalName, ip: cleanIp, token: finalToken });
+    }
+    resetForm();
+  };
+
+  const handleStartEdit = (host) => {
+    setFormName(host.name || '');
+    setFormIp(host.ip);
+    setFormToken(host.token || '');
+    setEditingIp(host.ip);
+  };
 
   const handleSelectHost = (ip) => {
     setServerIp(ip);
-    navigation.navigate('Home');
+    navigation.goBack();
   };
 
-  const openAddModal = () => {
-    setForm(EMPTY_FORM);
-    setEditingIp(null);
-    setModalVisible(true);
+  const handleQRScanned = ({ url, token, id }) => {
+    // Clean URL from protocol
+    const cleanIp = url.replace(/^https?:\/\//, '');
+    addHost({ name: id, ip: cleanIp, token });
+    setServerIp(cleanIp);
+    setShowScanner(false);
+    navigation.goBack();
   };
 
-  const openEditModal = (host) => {
-    setForm({ name: host.name || '', ip: host.ip });
-    setEditingIp(host.ip);
-    setModalVisible(true);
-  };
-
-  const handleSave = async () => {
-    if (!form.ip.trim()) return;
-    if (editingIp) {
-      await editHost(editingIp, { name: form.name.trim(), ip: form.ip.trim() });
-    } else {
-      await addHost({ name: form.name.trim(), ip: form.ip.trim() });
-    }
-    setModalVisible(false);
-    setForm(EMPTY_FORM);
-    setEditingIp(null);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (deleteTarget) {
-      await deleteHost(deleteTarget);
-      setDeleteTarget(null);
-    }
-  };
+  const isEditing = editingIp !== null;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-      <Portal>
-        <Modal
-          visible={modalVisible}
-          onDismiss={() => setModalVisible(false)}
-          contentContainerStyle={[styles.modal, { backgroundColor: theme.colors.surface }]}
-        >
-          <Text variant="titleMedium" style={styles.modalTitle}>
-            {editingIp ? 'Edit Host' : 'Add Host'}
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        {/* Header */}
+        <View style={{ 
+          flexDirection: 'row', 
+          alignItems: 'center', 
+          paddingTop: insets.top + 10,
+          paddingHorizontal: 14,
+          paddingBottom: 10,
+          backgroundColor: C.bg,
+          borderBottomWidth: 1,
+          borderBottomColor: 'rgba(72,72,71,0.2)'
+        }}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginRight: 16 }}>
+            <MaterialCommunityIcons name="arrow-left" size={24} color={C.primary} />
+          </TouchableOpacity>
+          <Text style={{
+            color: C.muted,
+            fontWeight: '700',
+            fontSize: 18,
+            letterSpacing: 2,
+            textTransform: 'uppercase',
+            fontFamily: MONO,
+          }}>
+            MANAGE HOSTS
           </Text>
-          <TextInput
-            label="Name (optional)"
-            value={form.name}
-            onChangeText={(v) => setForm(f => ({ ...f, name: v }))}
-            style={styles.input}
-            mode="outlined"
-          />
-          <TextInput
-            label="Address (IP or hostname:port)"
-            value={form.ip}
-            onChangeText={(v) => setForm(f => ({ ...f, ip: v }))}
-            style={styles.input}
-            mode="outlined"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <View style={styles.modalActions}>
-            <Button onPress={() => setModalVisible(false)}>Cancel</Button>
-            <Button mode="contained" onPress={handleSave} disabled={!form.ip.trim()}>
-              Save
-            </Button>
+          <View style={{ flex: 1 }} />
+          <TouchableOpacity onPress={() => setShowScanner(true)}>
+            <MaterialCommunityIcons name="qrcode-scan" size={22} color={C.primary} />
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          style={{ flex: 1 }}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ padding: 14, paddingBottom: insets.bottom + 20 }}
+        >
+          {/* ADD / EDIT FORM */}
+          <View
+            style={{
+              backgroundColor: C.surface,
+              borderLeftWidth: 3,
+              borderLeftColor: isEditing ? C.warn : C.primary,
+              padding: 14,
+              marginBottom: 24,
+              gap: 10,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 9,
+                letterSpacing: 2,
+                textTransform: 'uppercase',
+                color: isEditing ? C.warn : C.primary,
+                marginBottom: 2,
+                fontFamily: MONO,
+              }}
+            >
+              {isEditing ? 'EDIT_EXISTING_HOST' : 'REGISTER_NEW_HOST'}
+            </Text>
+
+            <RNTextInput
+              value={formName}
+              onChangeText={setFormName}
+              placeholder="Alias (e.g. AWS_EDGE_01)"
+              placeholderTextColor={C.outline}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={{
+                fontFamily: MONO,
+                fontSize: 13,
+                color: C.muted,
+                backgroundColor: C.surfaceHigh,
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                borderWidth: 1,
+                borderColor: C.outline,
+              }}
+            />
+
+            <RNTextInput
+              value={formIp}
+              onChangeText={setFormIp}
+              placeholder="ENDPOINT_ADDRESS (IP:PORT)"
+              placeholderTextColor={C.outline}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              style={{
+                fontFamily: MONO,
+                fontSize: 13,
+                color: C.muted,
+                backgroundColor: C.surfaceHigh,
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                borderWidth: 1,
+                borderColor: C.outline,
+              }}
+            />
+
+            <RNTextInput
+              value={formToken}
+              onChangeText={setFormToken}
+              placeholder="SECURITY_TOKEN (AUTH)"
+              placeholderTextColor={C.outline}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={{
+                fontFamily: MONO,
+                fontSize: 13,
+                color: C.muted,
+                backgroundColor: C.surfaceHigh,
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                borderWidth: 1,
+                borderColor: C.outline,
+              }}
+            />
+
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                onPress={handleSubmit}
+                activeOpacity={0.8}
+                style={{
+                  flex: 1,
+                  backgroundColor: isEditing ? C.warn : C.primary,
+                  paddingVertical: 9,
+                  alignItems: 'center',
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: MONO,
+                    fontSize: 11,
+                    fontWeight: '700',
+                    letterSpacing: 2,
+                    color: C.bg,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {isEditing ? 'SAVE_CHANGES' : 'COMMIT_HOST'}
+                </Text>
+              </TouchableOpacity>
+
+              {isEditing && (
+                <TouchableOpacity
+                  onPress={resetForm}
+                  activeOpacity={0.8}
+                  style={{
+                    paddingHorizontal: 14,
+                    paddingVertical: 9,
+                    borderWidth: 1,
+                    borderColor: C.outline,
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontFamily: MONO,
+                      fontSize: 11,
+                      letterSpacing: 1,
+                      color: C.muted,
+                    }}
+                  >
+                    ABORT
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
-        </Modal>
 
-        <Dialog visible={!!deleteTarget} onDismiss={() => setDeleteTarget(null)}>
-          <Dialog.Title>Delete Host</Dialog.Title>
-          <Dialog.Content>
-            <Text>Remove {deleteTarget} from the list?</Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setDeleteTarget(null)}>Cancel</Button>
-            <Button onPress={handleConfirmDelete}>Delete</Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+          {/* HOST LIST */}
+          <SectionHeader title="SAVED_HOSTS" subtitle="./known_hosts" />
 
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: insets.bottom + 80 }}>
-        {recentHosts.length > 0 ? (
-          recentHosts.map((host, index) => (
-            <Card key={index} style={styles.card} onPress={() => handleSelectHost(host.ip)}>
-              <List.Item
-                title={host.name ? host.name : host.ip}
-                description={host.name ? host.ip : `Last used: ${new Date(host.lastUsed).toLocaleString()}`}
-                left={props => <List.Icon {...props} icon="server" />}
-                right={() => (
-                  <View style={styles.actions}>
-                    <IconButton icon="pencil" onPress={() => openEditModal(host)} />
-                    <IconButton icon="delete" onPress={() => setDeleteTarget(host.ip)} />
-                  </View>
-                )}
+          {recentHosts.length === 0 ? (
+            <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+              <MaterialCommunityIcons name="server-off" size={48} color={C.muted} style={{ opacity: 0.3 }} />
+              <Text
+                style={{
+                  fontFamily: MONO,
+                  fontSize: 12,
+                  color: C.muted,
+                  opacity: 0.4,
+                  marginTop: 16,
+                  textAlign: 'center',
+                }}
+              >
+                {'// NO_HOSTS_DETECTED\n// SCAN_QR_OR_MANUAL_ENTRY'}
+              </Text>
+            </View>
+          ) : (
+            recentHosts.map((host) => (
+              <HostCard
+                key={host.ip}
+                serverIp={host.ip}
+                hostName={host.name}
+                isActive={host.ip === serverIp}
+                status={host.ip === serverIp ? status : CONNECTION_STATUS.DISCONNECTED}
+                reconnectAttempt={host.ip === serverIp ? reconnectAttempt : 0}
+                isSimplified={false}
+                onConnect={() => handleSelectHost(host.ip)}
+                onEditPress={() => handleStartEdit(host)}
+                onDeletePress={() => deleteHost(host.ip)}
               />
-            </Card>
-          ))
-        ) : (
-          <Text style={[styles.emptyText, { color: theme.colors.onSurfaceVariant }]}>No saved hosts yet.</Text>
-        )}
-      </ScrollView>
+            ))
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
 
-      <FAB
-        icon="plus"
-        style={[styles.fab, { bottom: insets.bottom + 16 }]}
-        onPress={openAddModal}
+      <QRScanner
+        visible={showScanner}
+        onClose={() => setShowScanner(false)}
+        onScanned={handleQRScanned}
       />
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  card: { marginBottom: 12 },
-  actions: { flexDirection: 'row' },
-  emptyText: { textAlign: 'center', marginTop: 40, fontStyle: 'italic' },
-  fab: { position: 'absolute', right: 16 },
-  modal: { margin: 20, padding: 20, borderRadius: 8 },
-  modalTitle: { marginBottom: 12 },
-  input: { marginBottom: 12 },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 4 },
-});

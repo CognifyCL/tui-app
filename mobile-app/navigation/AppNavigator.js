@@ -1,14 +1,18 @@
 import React from 'react';
 import { TouchableOpacity, View, StyleSheet } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
+import { MONO } from '../theme/theme';
 import HomeScreen from '../screens/HomeScreen';
 import TerminalScreen from '../screens/TerminalScreen';
 import SnippetsScreen from '../screens/SnippetsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import HostsScreen from '../screens/HostsScreen';
 
 const Tab = createBottomTabNavigator();
+const HomeStack = createNativeStackNavigator();
 
 const C = {
   bg: '#0e0e0e',
@@ -19,6 +23,15 @@ const C = {
   border: 'rgba(72,72,71,0.15)',
   primary: '#52fd2e',
 };
+
+function HomeStackScreen() {
+  return (
+    <HomeStack.Navigator screenOptions={{ headerShown: false }}>
+      <HomeStack.Screen name="HomeScreen" component={HomeScreen} />
+      <HomeStack.Screen name="ManageHosts" component={HostsScreen} />
+    </HomeStack.Navigator>
+  );
+}
 
 function KineticTabButton({ children, onPress, accessibilityState }) {
   const active = accessibilityState?.selected;
@@ -41,6 +54,7 @@ const sharedHeaderOptions = {
     letterSpacing: 2,
     textTransform: 'uppercase',
     fontSize: 16,
+    fontFamily: MONO,
   },
   headerTitle: 'KINETIC_CONSOLE',
   headerLeft: () => (
@@ -83,6 +97,7 @@ export default function AppNavigator() {
           fontSize: 10,
           letterSpacing: 1.5,
           textTransform: 'uppercase',
+          fontFamily: MONO,
         },
         tabBarButton: (props) => <KineticTabButton {...props} />,
         tabBarIcon: ({ focused, color, size }) => {
@@ -104,7 +119,7 @@ export default function AppNavigator() {
     >
       <Tab.Screen
         name="Hosts"
-        component={HomeScreen}
+        component={HomeStackScreen}
         options={{ tabBarLabel: 'HOSTS' }}
       />
       <Tab.Screen
@@ -141,6 +156,10 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginRight: 12,
+  },
+});
+s: 'center',
     marginRight: 12,
   },
 });

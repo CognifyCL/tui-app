@@ -2,67 +2,56 @@
 
 const http = require('http');
 const WebSocket = require('ws');
-const os = require('os');
-const pty = require('node-pty');
 const url = require('url');
-const { exec } = require('child_process');
 
-const PORT = process.env.PORT || 4000;
-const PROXY_SHELL = process.env.PROXY_SHELL || 'tmux';
+const config = require('./config');
+const tmux = require('./services/tmux.service');
+const tunnel = require('./services/tunnel.service');
+const security = require('./services/security.service');
+const pty = require('./services/pty.service');
+const daemon = require('./services/daemon.service');
 
-// Create HTTP server for both REST and WebSocket
-const server = http.createServer((req, res) => {
+let currentMagicLink = null;
+let currentDeepLink = null;
+
+// Create HTTP server for sessions API
+const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
   
-  if (parsedUrl.pathname === '/sessions') {
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Content-Type', 'application/json');
+  // CORS Headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204);
-      res.end();
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+
+  if (parsedUrl.pathname === '/sessions') {
+    res.setHeader('Content-Type', 'application/json');
+    if (!security.validateToken(parsedUrl.query.token)) {
+      res.writeHead(401);
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
       return;
     }
 
-    exec("tmux ls -F '#S\t#{session_created}\t#{session_attached}'", (error, stdout) => {
-      if (error || !stdout || !stdout.trim()) {
-        res.writeHead(200);
-        res.end(JSON.stringify([]));
-        return;
-      }
-
-      const lines = stdout.trim().split('\n').filter(l => l.trim().length > 0);
-      const now = Math.floor(Date.now() / 1000);
-
-      const metaPromises = lines.map(line => {
-        const [name, createdStr, attachedStr] = line.split('\t');
-        const attached = parseInt(attachedStr, 10) > 0;
-        const createdTs = parseInt(createdStr, 10);
-        const ageSecs = now - createdTs;
-        let created = '';
-        if (!isNaN(ageSecs) && ageSecs >= 0) {
-          if (ageSecs < 3600) created = `${Math.floor(ageSecs / 60)}m ago`;
-          else if (ageSecs < 86400) created = `${Math.floor(ageSecs / 3600)}h ago`;
-          else created = `${Math.floor(ageSecs / 86400)}d ago`;
-        }
-
-        return new Promise(resolve => {
-          exec(`tmux list-windows -t ${name} | wc -l`, (err, out) => {
-            const windows = err ? 1 : (parseInt(out.trim(), 10) || 1);
-            resolve({ name, windows, created, attached });
-          });
-        });
-      });
-
-      Promise.all(metaPromises).then(sessions => {
-        res.writeHead(200);
-        res.end(JSON.stringify(sessions));
-      });
-    });
+    const sessions = await tmux.listSessions();
+    res.writeHead(200);
+    res.end(JSON.stringify(sessions));
+  } else if (parsedUrl.pathname === '/') {
+    res.setHeader('Content-Type', 'text/html');
+    if (!currentMagicLink) {
+      res.writeHead(200);
+      res.end('<h1>Initializing...</h1><p>Please wait while the tunnel starts.</p>');
+      return;
+    }
+    const html = tunnel.getPairingHTML(currentMagicLink, currentDeepLink);
+    res.writeHead(200);
+    res.end(html);
   } else {
+    res.setHeader('Content-Type', 'application/json');
     res.writeHead(404);
     res.end('Not Found');
   }
@@ -70,112 +59,130 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocket.Server({ server });
 
-console.log(`--- TUI Proxy Server started on port ${PORT} ---`);
-console.log(`--- Using shell: ${PROXY_SHELL} ---`);
-
 wss.on('connection', (ws, req) => {
-  // Extraemos el nombre de la sesión de la URL (ej: ws://host:4000?session=mi-sesion)
   const parameters = url.parse(req.url, true).query;
   const sessionName = parameters.session || 'default';
-  
-  console.log(`Client connected! Attaching to session: ${sessionName}`);
+  const token = parameters.token;
 
-  // Iniciamos el PTY vinculado a la sesión de shell específica
-  const shellArgs = PROXY_SHELL === 'tmux' ? ['new-session', '-A', '-s', sessionName] : [];
+  if (!security.validateToken(token)) {
+    console.warn(`Unauthorized connection attempt to session: ${sessionName}`);
+    ws.close(1008, 'Unauthorized');
+    return;
+  }
   
-  const ptyProcess = pty.spawn(PROXY_SHELL, shellArgs, {
-    name: 'xterm-color',
-    cols: 80,
-    rows: 24,
-    cwd: process.env.HOME,
-    env: process.env
-  });
+  console.log(`Client connected to session: ${sessionName}`);
 
-  // --- Tmux Poweruser Helpers ---
-  const getWindows = (callback) => {
-    const cmd = `tmux list-windows -t ${sessionName} -F '#I:#W:#{window_active}'`;
-    exec(cmd, (error, stdout) => {
-      if (error) return callback([]);
-      const windows = stdout.trim().split('\n')
-        .filter(line => line.length > 0)
-        .map(line => {
-          const [id, name, active] = line.split(':');
-          return { id, name, active: active === '1' };
-        });
-      callback(windows);
-    });
+  const ptyProcess = pty.create(sessionName);
+  pty.register(sessionName, ws, ptyProcess);
+
+  // Tmux Sync Helpers
+  const broadcastWindows = async () => {
+    const windows = await tmux.listWindows(sessionName);
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'tmux-windows', data: windows }));
+    }
   };
 
-  const broadcastWindows = () => {
-    getWindows((windows) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'tmux-windows', data: windows }));
-      }
-    });
-  };
+  const syncInterval = setInterval(broadcastWindows, config.SYNC_INTERVAL_MS);
+  broadcastWindows();
 
-  const syncInterval = setInterval(broadcastWindows, 10000);
-  broadcastWindows(); // Initial sync
-  // ------------------------------
+  ptyProcess.onData(data => ws.send(data));
 
-  // Enviamos la salida de la terminal al WebSocket
-  ptyProcess.onData((data) => {
-    ws.send(data);
-  });
-
-  // Manejamos los mensajes que vienen del cliente (Móvil)
-  ws.on('message', (message) => {
+  ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
-
-      if (data.type === 'input') {
-        // Entrada de teclado / comandos
-        ptyProcess.write(data.content);
-      } else if (data.type === 'resize') {
-        // Redimensionamiento de la terminal (SIGWINCH)
-        ptyProcess.resize(data.cols, data.rows);
-      } else if (data.type === 'get-windows') {
-        broadcastWindows();
-      } else if (data.type === 'tmux-cmd') {
-        // Structured tmux command (Phase 1.1)
-        const allowedCommands = ['select-window', 'split-window', 'resize-pane', 'zoom-pane', 'kill-pane', 'new-window'];
-        const cmdParts = data.cmd.split(' ');
-        const subCommand = cmdParts[0];
-
-        // Basic Whitelist & Sanitization (Phase 1.2)
-        if (!allowedCommands.includes(subCommand)) {
-          console.warn(`Blocked unauthorized tmux command: ${subCommand}`);
-          return;
-        }
-
-        // Sanitize: No shells metacharacters
-        if (/[;&|]/.test(data.cmd)) {
-          console.warn(`Blocked potentially malicious tmux command: ${data.cmd}`);
-          return;
-        }
-
-        const fullCmd = `tmux ${data.cmd}`;
-        exec(fullCmd, (err) => {
-          if (!err) {
-            broadcastWindows(); // Immediate sync (Phase 1.5)
-          } else {
-            console.error(`Error executing tmux command "${fullCmd}":`, err.message);
-          }
-        });
+      if (data.type === 'input') ptyProcess.write(data.content);
+      else if (data.type === 'resize') ptyProcess.resize(data.cols, data.rows);
+      else if (data.type === 'get-windows') await broadcastWindows();
+      else if (data.type === 'tmux-cmd') {
+        await tmux.executeCommand(sessionName, data.cmd);
+        await broadcastWindows();
       }
     } catch (e) {
-      console.error('Error parsing message:', e.message);
+      console.error('Error handling message:', e.message);
     }
   });
 
-  // Limpieza al desconectar
   ws.on('close', () => {
-    console.log(`Client disconnected from session ${sessionName}, cleaning up pty...`);
+    console.log(`Cleaning up session: ${sessionName}`);
     clearInterval(syncInterval);
-    ptyProcess.kill();
+    pty.cleanup(sessionName);
   });
 });
 
-server.listen(PORT, () => {
-  console.log(`HTTP/WS Server listening on port ${PORT}`);
-});
+const configService = require('./services/config.service');
+
+async function startServer() {
+  server.listen(config.PORT, async () => {
+    console.clear();
+    console.log(`\x1b[1;32m--- KINETIC CONSOLE PROXY SERVER ---\x1b[0m`);
+    console.log(`Local port: ${config.PORT}`);
+    console.log(`Token: \x1b[33m${security.getToken()}\x1b[0m`);
+
+    const tunnelUrl = await tunnel.start(config.PORT);
+    if (tunnelUrl) {
+      configService.set('TUNNEL_URL', tunnelUrl);
+      currentMagicLink = tunnel.generateMagicLink(tunnelUrl, security.getToken());
+      currentDeepLink = tunnel.generateDeepLink(tunnelUrl, security.getToken());
+
+      tunnel.showQRCode(currentMagicLink);
+      console.log(`\n\x1b[1mPairing Page:\x1b[0m \x1b[4;34m${tunnelUrl}\x1b[0m`);
+    }
+  });
+}
+
+const command = process.argv[2] || 'start';
+
+// Command Router
+switch (command) {
+  case 'install':
+    console.log('Installing kinetic-console as a system daemon...');
+    if (daemon.install()) {
+      console.log('Successfully installed! You can check status with: systemctl status kinetic-console');
+    }
+    break;
+
+  case 'uninstall':
+    console.log('Uninstalling kinetic-console daemon...');
+    if (daemon.uninstall()) {
+      console.log('Successfully uninstalled.');
+    }
+    break;
+
+  case 'status':
+    const active = daemon.status();
+    console.log(`Daemon Status: ${active ? '\x1b[32mACTIVE\x1b[0m' : '\x1b[31mINACTIVE\x1b[0m'}`);
+    break;
+
+  case 'connect':
+    const savedUrl = configService.get('TUNNEL_URL');
+    const savedToken = security.getToken();
+
+    if (!savedUrl) {
+      console.log('\x1b[31mError: No active tunnel found.\x1b[0m');
+      console.log('Make sure the daemon is running with: kinetic-console status');
+      console.log('Or start it manually to generate a new tunnel.');
+      break;
+    }
+
+    const magic = tunnel.generateMagicLink(savedUrl, savedToken);
+    const deep = tunnel.generateDeepLink(savedUrl, savedToken);
+
+    console.clear();
+    console.log(`\x1b[1;32m--- KINETIC CONSOLE // CONNECTION INFO ---\x1b[0m`);
+    tunnel.showQRCode(magic);
+    console.log(`\n\x1b[1mPairing Page:\x1b[0m \x1b[4;34m${savedUrl}\x1b[0m`);
+    console.log(`\x1b[1mDeep Link:\x1b[0m \x1b[4;36m${deep}\x1b[0m`);
+    break;
+
+  case 'logs':
+    console.log('Showing daemon logs (journalctl)...');
+    daemon.logs();
+    break;
+
+  case 'start':
+  default:
+    startServer();
+    break;
+}
+

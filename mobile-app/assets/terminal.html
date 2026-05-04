@@ -74,7 +74,7 @@
     top: 0;
     width: 0;
     height: 0;
-    z-index: -5;
+    z-index: 10;
     /** Prevent wrapping so the IME appears against the textarea at the correct position */
     white-space: nowrap;
     overflow: hidden;
@@ -223,12 +223,33 @@
 //# sourceMappingURL=xterm-addon-fit.js.map
     </script>
     <style>
-        body, html { margin: 0; padding: 0; background-color: #000; height: 100%; overflow: hidden; width: 100%; }
-        #terminal { height: 100vh; width: 100vw; }
+        body, html { margin: 0; padding: 0; background-color: #000; height: 100%; overflow: hidden; width: 100%; position: fixed; }
+        #terminal { height: 100vh; width: 100vw; touch-action: none; }
+        #scroll-track {
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: 20px;
+            height: 100vh;
+            z-index: 200;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        #scroll-track.visible { opacity: 1; }
+        #scroll-thumb {
+            position: absolute;
+            right: 4px;
+            width: 4px;
+            background: #52fd2e;
+            border-radius: 2px;
+            min-height: 24px;
+            opacity: 0.7;
+        }
     </style>
 </head>
 <body>
     <div id="terminal"></div>
+    <div id="scroll-track"><div id="scroll-thumb"></div></div>
     <script>
         const darkTheme = { background: '#000000', foreground: '#00ff00', cursor: '#00ff00' };
         const lightTheme = { background: '#f5f5f5', foreground: '#1a1a1a', cursor: '#333333', selectionBackground: '#aaaaaa' };
@@ -238,7 +259,9 @@
             fontFamily: 'monospace',
             fontSize: 12,
             cursorBlink: false,
-            allowProposedApi: true
+            allowProposedApi: true,
+            scrollback: 10000,
+            smoothScrollDuration: 0,
         });
 
         const fitAddon = new FitAddon.FitAddon();
@@ -259,10 +282,90 @@
             fitAddon.fit();
         };
 
-        // --- Lógica de Gestos Pro (Scroll y Pinch con dos dedos) ---
+        // --- Scrollbar ---
+        const scrollTrack = document.getElementById('scroll-track');
+        const scrollThumb = document.getElementById('scroll-thumb');
+        let hideScrollbarTimer = null;
+
+        const updateScrollbar = () => {
+            const buf = term.buffer.active;
+            const totalLines = buf.length;
+            const rows = term.rows;
+            const maxScroll = Math.max(0, totalLines - rows);
+
+            if (maxScroll === 0) {
+                scrollTrack.classList.remove('visible');
+                return;
+            }
+
+            const barH = scrollTrack.clientHeight || window.innerHeight;
+            const thumbRatio = Math.min(1, rows / totalLines);
+            const thumbH = Math.max(24, barH * thumbRatio);
+            const viewportY = buf.viewportY; // 0 = bottom, maxScroll = top
+            const scrollPercent = viewportY / maxScroll; // 0=bottom, 1=top
+            const thumbTop = (1 - scrollPercent) * (barH - thumbH);
+
+            scrollThumb.style.height = thumbH + 'px';
+            scrollThumb.style.top = thumbTop + 'px';
+
+            scrollTrack.classList.add('visible');
+            clearTimeout(hideScrollbarTimer);
+            hideScrollbarTimer = setTimeout(() => scrollTrack.classList.remove('visible'), 1500);
+        };
+
+        term.onScroll(updateScrollbar);
+
+        // Drag scrollbar thumb
+        let isDraggingScrollbar = false;
+        let dragStartY = 0;
+        let dragStartViewportY = 0;
+
+        scrollTrack.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            isDraggingScrollbar = true;
+            dragStartY = e.touches[0].pageY;
+            dragStartViewportY = term.buffer.active.viewportY;
+            scrollTrack.classList.add('visible');
+            clearTimeout(hideScrollbarTimer);
+        }, { passive: false });
+
+        scrollTrack.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!isDraggingScrollbar) return;
+
+            const buf = term.buffer.active;
+            const maxScroll = Math.max(0, buf.length - term.rows);
+            const barH = scrollTrack.clientHeight || window.innerHeight;
+            const thumbH = Math.max(24, barH * Math.min(1, term.rows / buf.length));
+            const usableH = barH - thumbH;
+
+            const deltaY = e.touches[0].pageY - dragStartY;
+            // deltaY positive = moved down = less scrolled (towards bottom)
+            const deltaScroll = -(deltaY / usableH) * maxScroll;
+            const newViewportY = Math.round(Math.max(0, Math.min(maxScroll, dragStartViewportY + deltaScroll)));
+            term.scrollLines(newViewportY - buf.viewportY);
+        }, { passive: false });
+
+        scrollTrack.addEventListener('touchend', (e) => {
+            e.stopPropagation();
+            isDraggingScrollbar = false;
+            hideScrollbarTimer = setTimeout(() => scrollTrack.classList.remove('visible'), 1500);
+        });
+        // -----------------
+
+        // --- Gestos: scroll 1 dedo, pinch-zoom 2 dedos ---
         let lastTouchY = 0;
         let isTwoFingerTouch = false;
         let lastPinchDistance = null;
+
+        // Single-finger scroll state
+        let sfStartX = 0;
+        let sfStartY = 0;
+        let sfLastY = 0;
+        let sfIsScrolling = false;
+        const SF_THRESHOLD = 6; // px before committing to scroll vs tap
 
         const getPinchDistance = (touches) => {
             const dx = touches[0].pageX - touches[1].pageX;
@@ -272,18 +375,25 @@
 
         document.getElementById('terminal').addEventListener('touchstart', (e) => {
             if (e.touches.length === 2) {
+                e.preventDefault();
                 isTwoFingerTouch = true;
+                sfIsScrolling = false;
                 lastTouchY = (e.touches[0].pageY + e.touches[1].pageY) / 2;
                 lastPinchDistance = getPinchDistance(e.touches);
-                e.preventDefault();
-            } else {
+            } else if (e.touches.length === 1) {
                 isTwoFingerTouch = false;
                 lastPinchDistance = null;
+                sfStartX = e.touches[0].pageX;
+                sfStartY = e.touches[0].pageY;
+                sfLastY  = e.touches[0].pageY;
+                sfIsScrolling = false;
             }
         }, { passive: false });
 
         document.getElementById('terminal').addEventListener('touchmove', (e) => {
             if (isTwoFingerTouch && e.touches.length === 2) {
+                e.preventDefault();
+                // Two-finger: pinch-zoom or scroll
                 const currentPinchDistance = getPinchDistance(e.touches);
                 const pinchDelta = currentPinchDistance - lastPinchDistance;
 
@@ -297,21 +407,46 @@
                 } else {
                     const currentTouchY = (e.touches[0].pageY + e.touches[1].pageY) / 2;
                     const deltaY = lastTouchY - currentTouchY;
-                    if (Math.abs(deltaY) > 5) {
-                        const lines = Math.round(deltaY / 10);
+                    if (Math.abs(deltaY) > 3) {
+                        const lines = Math.round(deltaY / 5);
                         if (lines !== 0) {
                             term.scrollLines(lines);
                             lastTouchY = currentTouchY;
                         }
                     }
                 }
-                e.preventDefault();
+            } else if (!isTwoFingerTouch && e.touches.length === 1) {
+                // Single-finger: detect vertical swipe, commit to scroll
+                const currentY = e.touches[0].pageY;
+                const currentX = e.touches[0].pageX;
+                const totalDY = currentY - sfStartY;
+                const totalDX = currentX - sfStartX;
+
+                if (!sfIsScrolling && Math.abs(totalDY) > SF_THRESHOLD && Math.abs(totalDY) > Math.abs(totalDX)) {
+                    sfIsScrolling = true;
+                }
+
+                if (sfIsScrolling) {
+                    e.preventDefault();
+                    const deltaY = sfLastY - currentY;
+                    const lines = Math.round(deltaY / 5);
+                    if (lines !== 0) {
+                        term.scrollLines(lines);
+                        sfLastY = currentY;
+                    }
+                }
             }
         }, { passive: false });
 
-        document.getElementById('terminal').addEventListener('touchend', () => {
+        document.getElementById('terminal').addEventListener('touchend', (e) => {
+            const wasTap = !sfIsScrolling && !isTwoFingerTouch;
             isTwoFingerTouch = false;
             lastPinchDistance = null;
+            sfIsScrolling = false;
+            // Tap: focus the xterm terminal so the keyboard appears
+            if (wasTap) {
+                term.focus();
+            }
         });
         // --------------------------------------------------
 

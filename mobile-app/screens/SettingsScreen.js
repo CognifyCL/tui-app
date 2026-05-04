@@ -1,32 +1,20 @@
-import React, { useState, useContext } from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
   ScrollView,
   TouchableOpacity,
   TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Text, Dialog, Portal, Button } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ThemeContext, LOG_LEVELS } from '../context/ThemeContext';
-import { TerminalContext } from '../context/TerminalContext';
-
-// ── Color constants ──────────────────────────────────────────────────────────
-const C = {
-  bg: '#0e0e0e',
-  surface: '#131313',
-  surfaceHigh: '#20201f',
-  primary: '#52fd2e',
-  onPrimary: '#0e5b00',
-  muted: '#adaaaa',
-  outline: '#484847',
-  error: '#ff7351',
-  errorContainer: '#b92902',
-  warn: '#eba300',
-  warnContainer: '#7f5600',
-};
+import { useThemeContext, LOG_LEVELS } from '../context/ThemeContext';
+import { useTerminal } from '../hooks/useTerminal';
+import { C, MONO } from '../theme/theme.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const FONT_SIZE_OPTIONS = [10, 12, 14, 16, 18];
@@ -95,9 +83,9 @@ export default function SettingsScreen() {
     setLogLevel,
     fontSize,
     setFontSize,
-  } = useContext(ThemeContext);
+  } = useThemeContext();
 
-  const { logs, sendInput, clearAllStorage } = useContext(TerminalContext);
+  const { logs, sendInput, clearLogs } = useTerminal();
 
   // Dialog visibility
   const [fontSizeDialogVisible, setFontSizeDialogVisible] = useState(false);
@@ -114,12 +102,12 @@ export default function SettingsScreen() {
 
   const handleClearCache = async () => {
     setClearCacheDialogVisible(false);
-    await clearAllStorage();
+    await clearLogs();
   };
 
   const handleReset = async () => {
     setResetDialogVisible(false);
-    await clearAllStorage();
+    await clearLogs();
     navigation.reset({ index: 0, routes: [{ name: 'Home' }] });
   };
 
@@ -137,7 +125,10 @@ export default function SettingsScreen() {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: C.bg }}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
       <ScrollView
         style={styles.container}
         contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
@@ -214,7 +205,7 @@ export default function SettingsScreen() {
             onPress={() => setSessionPersistence(v => !v)}
             style={[
               styles.toggleTrack,
-              { backgroundColor: sessionPersistence ? '#0e7a6e' : C.surfaceHigh },
+              { backgroundColor: sessionPersistence ? C.primary : C.surfaceHigh },
             ]}
           >
             <View
@@ -222,7 +213,7 @@ export default function SettingsScreen() {
                 styles.toggleThumb,
                 {
                   transform: [{ translateX: sessionPersistence ? 16 : 0 }],
-                  backgroundColor: sessionPersistence ? '#4ef0de' : C.muted,
+                  backgroundColor: sessionPersistence ? C.onPrimary : C.muted,
                 },
               ]}
             />
@@ -234,9 +225,9 @@ export default function SettingsScreen() {
           {/* Header row */}
           <View style={styles.logHeader}>
             <View style={styles.logDots}>
-              <View style={[styles.dot, { backgroundColor: '#ff5f57' }]} />
-              <View style={[styles.dot, { backgroundColor: '#ffbd2e' }]} />
-              <View style={[styles.dot, { backgroundColor: '#28c840' }]} />
+              <View style={[styles.dot, { backgroundColor: C.error }]} />
+              <View style={[styles.dot, { backgroundColor: C.warn }]} />
+              <View style={[styles.dot, { backgroundColor: C.primary }]} />
             </View>
             <Text style={styles.logHeaderLabel}>LIVE_LOG_STREAM</Text>
             <View style={styles.logHeaderRight}>
@@ -257,7 +248,7 @@ export default function SettingsScreen() {
               <Text style={styles.logEmpty}>-- no log entries --</Text>
             ) : (
               visibleLogs.map((entry, idx) => {
-                const level = (entry.level || 'INFO').toUpperCase();
+                const level = (entry.type || 'INFO').toUpperCase();
                 const color = LOG_LEVEL_COLORS[level] || C.muted;
                 const isDebug = level === 'DEBUG';
                 return (
@@ -413,7 +404,7 @@ export default function SettingsScreen() {
           </Dialog.Actions>
         </Dialog>
       </Portal>
-    </>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -438,13 +429,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     letterSpacing: -0.5,
-    color: '#ffffff',
+    color: C.primary,
     textTransform: 'uppercase',
   },
   versionBadge: {
     fontSize: 9,
     color: C.muted,
-    fontFamily: 'monospace',
+    fontFamily: MONO,
     letterSpacing: 0.5,
   },
 
@@ -466,13 +457,13 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     color: C.primary,
     marginBottom: 4,
-    fontFamily: 'monospace',
+    fontFamily: MONO,
   },
   sectionSubtitle: {
     fontSize: 11,
     color: C.muted,
     marginBottom: 4,
-    fontFamily: 'monospace',
+    fontFamily: MONO,
   },
   sectionDesc: {
     fontSize: 10,
@@ -498,7 +489,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
     letterSpacing: 2,
-    fontFamily: 'monospace',
+    fontFamily: MONO,
   },
 
   // Progress bar
@@ -524,8 +515,8 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
     letterSpacing: 2,
-    color: '#ffd2c8',
-    fontFamily: 'monospace',
+    color: C.error,
+    fontFamily: MONO,
   },
 
   // Session persistence toggle
@@ -567,7 +558,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 2,
     color: C.muted,
-    fontFamily: 'monospace',
+    fontFamily: MONO,
   },
   logHeaderRight: {
     flexDirection: 'row',
@@ -578,28 +569,28 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#28c840',
+    backgroundColor: C.primary,
   },
   activeLabel: {
     fontSize: 9,
-    color: '#28c840',
+    color: C.primary,
     fontWeight: 'bold',
     letterSpacing: 1,
-    fontFamily: 'monospace',
+    fontFamily: MONO,
   },
   logBody: {
     height: 280,
-    backgroundColor: '#000000',
+    backgroundColor: C.bg,
     padding: 10,
   },
   logLine: {
     fontSize: 11,
-    fontFamily: 'monospace',
+    fontFamily: MONO,
     lineHeight: 18,
   },
   logEmpty: {
     fontSize: 11,
-    fontFamily: 'monospace',
+    fontFamily: MONO,
     color: C.outline,
     fontStyle: 'italic',
   },
@@ -619,14 +610,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 2,
     color: C.error,
-    fontFamily: 'monospace',
+    fontFamily: MONO,
   },
 
   // Command bar
   commandBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0e0e0e',
+    backgroundColor: C.bg,
     borderTopWidth: 1,
     borderTopColor: C.outline,
     paddingHorizontal: 14,
@@ -636,20 +627,20 @@ const styles = StyleSheet.create({
   commandPrefix: {
     fontSize: 16,
     color: C.primary,
-    fontFamily: 'monospace',
+    fontFamily: MONO,
     fontWeight: 'bold',
   },
   commandInput: {
     flex: 1,
     fontSize: 13,
-    color: '#ffffff',
-    fontFamily: 'monospace',
+    color: C.text,
+    fontFamily: MONO,
     paddingVertical: 4,
   },
   commandSuffix: {
     fontSize: 16,
     color: C.muted,
-    fontFamily: 'monospace',
+    fontFamily: MONO,
   },
 
   // Dialogs
@@ -662,7 +653,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     letterSpacing: 2,
     color: C.primary,
-    fontFamily: 'monospace',
+    fontFamily: MONO,
   },
   dialogBody: {
     fontSize: 12,
@@ -692,7 +683,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
     color: C.muted,
-    fontFamily: 'monospace',
+    fontFamily: MONO,
   },
   fontSizeBtnTextActive: {
     color: C.onPrimary,

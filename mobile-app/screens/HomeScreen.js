@@ -5,571 +5,55 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  Platform,
   StyleSheet,
 } from 'react-native';
 import { Portal, Dialog, TextInput, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+
 import { useTerminal } from '../hooks/useTerminal';
-import { resolveHost } from '../utils/url';
-import { useLogger } from '../hooks/useLogger';
+import { useSessions } from '../hooks/useSessions';
 import * as Haptics from 'expo-haptics';
 
-const C = {
-  bg: '#0e0e0e',
-  surface: '#131313',
-  surfaceHigh: '#20201f',
-  primary: '#52fd2e',
-  onPrimary: '#0e5b00',
-  muted: '#adaaaa',
-  outline: '#484847',
-  error: '#ff7351',
-  warn: '#eba300',
-};
-
-const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
-
-function StatusDashboard({ isConnected, sessions }) {
-  return (
-    <View style={{ flexDirection: 'row', marginBottom: 16 }}>
-      {/* SYSTEM STATUS */}
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: C.surface,
-          padding: 12,
-          borderLeftWidth: 2,
-          borderLeftColor: C.primary,
-        }}
-      >
-        <Text
-          style={{
-            fontSize: 9,
-            letterSpacing: 2,
-            textTransform: 'uppercase',
-            color: C.muted,
-            marginBottom: 6,
-          }}
-        >
-          SYSTEM STATUS
-        </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <View
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: 4,
-              backgroundColor: isConnected ? C.primary : C.error,
-            }}
-          />
-          <Text
-            style={{
-              fontFamily: MONO,
-              fontSize: 10,
-              color: isConnected ? C.primary : C.error,
-              fontWeight: '700',
-            }}
-          >
-            {isConnected ? 'UPLINK_STABLE' : 'DISCONNECTED'}
-          </Text>
-        </View>
-      </View>
-
-      {/* ACTIVE SESSIONS */}
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: C.surface,
-          padding: 12,
-          marginLeft: 1,
-        }}
-      >
-        <Text
-          style={{
-            fontSize: 9,
-            letterSpacing: 2,
-            textTransform: 'uppercase',
-            color: C.muted,
-            marginBottom: 4,
-          }}
-        >
-          ACTIVE SESSIONS
-        </Text>
-        <Text>
-          <Text
-            style={{
-              fontFamily: MONO,
-              fontSize: 20,
-              color: C.primary,
-              fontWeight: '700',
-            }}
-          >
-            {sessions.length}
-          </Text>
-          <Text
-            style={{
-              fontFamily: MONO,
-              fontSize: 10,
-              color: C.muted,
-            }}
-          >
-            {' TOTAL'}
-          </Text>
-        </Text>
-      </View>
-
-      {/* LATENCY */}
-      <View
-        style={{
-          flex: 1,
-          backgroundColor: C.surface,
-          padding: 12,
-          marginLeft: 1,
-        }}
-      >
-        <Text
-          style={{
-            fontSize: 9,
-            letterSpacing: 2,
-            textTransform: 'uppercase',
-            color: C.muted,
-            marginBottom: 4,
-          }}
-        >
-          LATENCY
-        </Text>
-        <Text
-          style={{
-            fontFamily: MONO,
-            fontSize: 20,
-            color: C.muted,
-            fontWeight: '700',
-          }}
-        >
-          —
-        </Text>
-      </View>
-    </View>
-  );
-}
-
-function SectionHeader({ title, subtitle }) {
-  return (
-    <View
-      style={{
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingBottom: 8,
-        marginBottom: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(72,72,71,0.15)',
-      }}
-    >
-      <Text
-        style={{
-          fontWeight: '700',
-          fontSize: 22,
-          letterSpacing: -0.5,
-          textTransform: 'uppercase',
-          color: '#ffffff',
-        }}
-      >
-        {title}
-      </Text>
-      <Text
-        style={{
-          fontFamily: MONO,
-          fontSize: 11,
-          color: C.muted,
-          opacity: 0.7,
-        }}
-      >
-        {subtitle}
-      </Text>
-    </View>
-  );
-}
-
-function SessionRow({ session, connectedSession, onPress }) {
-  const isActive = session.name === connectedSession;
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.7}
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#1a1a1a',
-        paddingHorizontal: 12,
-        paddingVertical: 10,
-        marginBottom: 2,
-        gap: 10,
-      }}
-    >
-      <MaterialCommunityIcons
-        name="console"
-        size={16}
-        color={isActive ? C.primary : C.muted}
-      />
-      <Text
-        style={{
-          fontFamily: MONO,
-          fontSize: 13,
-          color: isActive ? C.primary : '#e0e0e0',
-          flex: 1,
-        }}
-      >
-        {session.name}
-      </Text>
-      {session.attached && (
-        <View
-          style={{
-            backgroundColor: 'rgba(82,253,46,0.12)',
-            paddingHorizontal: 5,
-            paddingVertical: 2,
-            borderRadius: 2,
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 8,
-              color: C.primary,
-              letterSpacing: 1,
-              textTransform: 'uppercase',
-            }}
-          >
-            ATT
-          </Text>
-        </View>
-      )}
-      <MaterialCommunityIcons name="chevron-right" size={14} color={C.muted} />
-    </TouchableOpacity>
-  );
-}
-
-function HostCard({ serverIp, sessions, connectedSession, onConnect, onSessionPress, onNoHost, navigation }) {
-  if (!serverIp) {
-    return (
-      <View
-        style={{
-          backgroundColor: C.surface,
-          padding: 24,
-          alignItems: 'center',
-          gap: 12,
-        }}
-      >
-        <Text
-          style={{
-            color: C.muted,
-            fontSize: 13,
-            fontFamily: MONO,
-          }}
-        >
-          No hosts configured
-        </Text>
-        <TouchableOpacity
-          onPress={onNoHost}
-          activeOpacity={0.7}
-          style={{
-            backgroundColor: C.surfaceHigh,
-            paddingHorizontal: 16,
-            paddingVertical: 8,
-            borderWidth: 1,
-            borderColor: C.outline,
-          }}
-        >
-          <Text
-            style={{
-              color: C.primary,
-              fontSize: 10,
-              letterSpacing: 2,
-              textTransform: 'uppercase',
-            }}
-          >
-            Add Host
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  return (
-    <View
-      style={{
-        backgroundColor: C.surface,
-        borderLeftWidth: 4,
-        borderLeftColor: C.primary,
-        marginBottom: 12,
-      }}
-    >
-      {/* Card header row */}
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          padding: 14,
-          gap: 12,
-        }}
-      >
-        {/* Icon container */}
-        <View
-          style={{
-            width: 36,
-            height: 36,
-            backgroundColor: 'rgba(82,253,46,0.1)',
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 2,
-          }}
-        >
-          <MaterialCommunityIcons name="dns" size={20} color={C.primary} />
-        </View>
-
-        {/* Host info */}
-        <View style={{ flex: 1, gap: 2 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text
-              style={{
-                fontWeight: '700',
-                fontSize: 16,
-                textTransform: 'uppercase',
-                color: C.primary,
-                letterSpacing: 0.5,
-              }}
-            >
-              {serverIp.split(':')[0]}
-            </Text>
-            <View
-              style={{
-                backgroundColor: '#34e507',
-                paddingHorizontal: 4,
-                paddingVertical: 2,
-                borderRadius: 2,
-              }}
-            >
-              <Text
-                style={{
-                  color: '#0e5b00',
-                  fontSize: 8,
-                  fontWeight: '700',
-                  letterSpacing: 1,
-                  textTransform: 'uppercase',
-                }}
-              >
-                ACTIVE
-              </Text>
-            </View>
-          </View>
-          <Text
-            style={{
-              fontFamily: MONO,
-              fontSize: 11,
-              color: C.muted,
-            }}
-          >
-            {serverIp}
-          </Text>
-        </View>
-
-        {/* CONNECT button */}
-        <TouchableOpacity
-          onPress={onConnect}
-          activeOpacity={0.7}
-          style={{
-            backgroundColor: C.surfaceHigh,
-            paddingHorizontal: 12,
-            paddingVertical: 7,
-            borderWidth: 1,
-            borderColor: C.outline,
-          }}
-        >
-          <Text
-            style={{
-              color: C.primary,
-              fontSize: 10,
-              letterSpacing: 2,
-              textTransform: 'uppercase',
-            }}
-          >
-            CONNECT
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Sessions section */}
-      <View style={{ paddingHorizontal: 14, paddingBottom: 14 }}>
-        <Text
-          style={{
-            fontSize: 9,
-            letterSpacing: 2,
-            textTransform: 'uppercase',
-            color: C.muted,
-            opacity: 0.6,
-            marginBottom: 8,
-          }}
-        >
-          ATTACHED TMUX SESSIONS
-        </Text>
-
-        {sessions.length === 0 ? (
-          <Text
-            style={{
-              fontFamily: MONO,
-              fontSize: 12,
-              color: C.muted,
-              opacity: 0.5,
-              paddingVertical: 8,
-            }}
-          >
-            No active sessions. Create one with +
-          </Text>
-        ) : (
-          sessions.map((s, idx) => (
-            <SessionRow
-              key={idx}
-              session={s}
-              connectedSession={connectedSession}
-              onPress={() => onSessionPress(s.name)}
-            />
-          ))
-        )}
-      </View>
-    </View>
-  );
-}
-
-function LogStrip({ logs }) {
-  const last3 = logs.slice(-3);
-
-  const levelStyle = (level) => {
-    if (level === 'error') return { color: C.error };
-    if (level === 'warn') return { color: C.warn };
-    return { color: C.primary };
-  };
-
-  const levelPrefix = (level) => {
-    if (level === 'error') return '[ERR]';
-    if (level === 'warn') return '[WARN]';
-    return '[OK]';
-  };
-
-  return (
-    <View
-      style={{
-        backgroundColor: '#000',
-        paddingHorizontal: 10,
-        paddingVertical: 8,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(72,72,71,0.4)',
-      }}
-    >
-      {last3.length === 0 ? (
-        <Text
-          style={{
-            fontFamily: MONO,
-            fontSize: 11,
-            color: C.muted,
-            opacity: 0.4,
-          }}
-        >
-          {'// no log entries'}
-        </Text>
-      ) : (
-        last3.map((entry, idx) => (
-          <View key={idx} style={{ flexDirection: 'row', gap: 6 }}>
-            <Text
-              style={{
-                fontFamily: MONO,
-                fontSize: 11,
-                fontWeight: '700',
-                ...levelStyle(entry.level),
-              }}
-            >
-              {levelPrefix(entry.level)}
-            </Text>
-            <Text
-              style={{
-                fontFamily: MONO,
-                fontSize: 11,
-                color: C.muted,
-                flex: 1,
-              }}
-              numberOfLines={1}
-            >
-              {entry.message}
-            </Text>
-          </View>
-        ))
-      )}
-    </View>
-  );
-}
+import { C, MONO } from '../theme/theme';
+import { CONNECTION_STATUS } from '../config/constants';
+import StatusDashboard from '../components/ui/StatusDashboard';
+import SectionHeader from '../components/ui/SectionHeader';
+import LogStrip from '../components/ui/LogStrip';
+import HostCard from '../components/host/HostCard';
 
 export default function HomeScreen({ navigation }) {
+  useDeepLinks();
   const insets = useSafeAreaInsets();
   const {
     serverIp,
-    sessions, setSessions,
-    isRefreshing, setIsRefreshing,
-    connect, status,
+    connect, status, reconnectAttempt,
     logs,
+    recentHosts,
+    setServerIp,
+    sessionName,
   } = useTerminal();
-  const { log } = useLogger();
-  const autoFetchedRef = useRef(false);
+  const { sessions, isRefreshing, fetchSessions } = useSessions();
 
   const [dialogVisible, setDialogVisible] = useState(false);
   const [newSessionName, setNewSessionName] = useState('default');
 
-  const connectedSession = status.startsWith('Connected: ')
-    ? status.slice('Connected: '.length)
-    : null;
+  const connectedSession = status === CONNECTION_STATUS.CONNECTED ? sessionName : null;
 
   const isConnected = !!serverIp;
 
-  const showDialog = useCallback(() => {
+  useFocusEffect(
+    useCallback(() => {
+      if (serverIp) {
+        fetchSessions();
+      }
+    }, [serverIp, fetchSessions])
+  );
+
+  const showDialog = () => {
     setNewSessionName('default');
     setDialogVisible(true);
-  }, []);
-
-  // Remove header right — FAB replaces it
-  useEffect(() => {
-    navigation.setOptions({ headerRight: () => null });
-  }, [navigation]);
-
-  // Auto-fetch sessions once when serverIp becomes available
-  useEffect(() => {
-    if (serverIp && !autoFetchedRef.current) {
-      autoFetchedRef.current = true;
-      fetchSessions();
-    }
-  }, [serverIp]);
-
-  const fetchSessions = async () => {
-    if (!serverIp) {
-      log('No host configured', 'error');
-      return;
-    }
-
-    const { httpUrl } = resolveHost(serverIp);
-    setIsRefreshing(true);
-    log(`Fetching sessions from ${httpUrl}/sessions...`, 'info');
-
-    try {
-      const response = await fetch(`${httpUrl}/sessions`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      setSessions(data);
-      log(`Fetched ${data.length} sessions`, 'success');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
-      log(`Fetch error: ${error.message}`, 'error');
-      setSessions([]);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setIsRefreshing(false);
-    }
   };
 
   const handleCreateSession = () => {
@@ -610,17 +94,29 @@ export default function HomeScreen({ navigation }) {
           />
         }
       >
-        <StatusDashboard isConnected={isConnected} sessions={sessions} />
+        <StatusDashboard status={status} reconnectAttempt={reconnectAttempt} sessions={sessions} />
 
-        <SectionHeader title="HOSTS" subtitle="./managed_endpoints" />
+        <SectionHeader 
+          title="HOSTS" 
+          subtitle="./managed_endpoints" 
+          rightElement={
+            <TouchableOpacity onPress={() => navigation.navigate('ManageHosts')}>
+              <MaterialCommunityIcons name="cog-outline" size={22} color={C.primary} />
+            </TouchableOpacity>
+          }
+        />
 
         <HostCard
           serverIp={serverIp}
+          hostName={recentHosts.find(h => h.ip === serverIp)?.name}
+          isActive={true}
+          status={status}
+          reconnectAttempt={reconnectAttempt}
           sessions={sessions}
           connectedSession={connectedSession}
           onConnect={handleConnectButton}
           onSessionPress={handleConnectSession}
-          onNoHost={() => navigation.navigate('Hosts')}
+          isSimplified={true}
           navigation={navigation}
         />
       </ScrollView>
@@ -657,6 +153,7 @@ export default function HomeScreen({ navigation }) {
             fontSize: 28,
             fontWeight: '700',
             lineHeight: 32,
+            fontFamily: MONO,
           }}
         >
           +
@@ -696,6 +193,11 @@ export default function HomeScreen({ navigation }) {
             </Button>
           </Dialog.Actions>
         </Dialog>
+      </Portal>
+    </View>
+  );
+}
+
       </Portal>
     </View>
   );

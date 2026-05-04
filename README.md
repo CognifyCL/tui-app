@@ -1,4 +1,4 @@
-# TUI Mobile Client 📱💻
+# Kinetic Console 📱💻
 
 **The professional, minimalist terminal client for AI Engineers and Sysadmins.**
 
@@ -37,7 +37,7 @@ The proxy server needs to run on the machine where your tmux sessions are.
 cd proxy-server
 npm install
 npm link
-tui-app-proxy --port 4000
+kinetic-console install
 ```
 
 **Option B: Docker**
